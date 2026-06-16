@@ -1,0 +1,277 @@
+"""Tests for workflow logic — LLM calls are mocked."""
+import pytest
+from unittest.mock import MagicMock, patch
+
+from backend.app.schemas.agent_schemas import ScenarioItem, TestCaseItem, TestCasePayloadResult
+from backend.app.workflows.mvp_workflow import MVPWorkflow
+from backend.app.workflows.test_case_payload_workflow import TestCasePayloadWorkflow
+
+
+# ── MVPWorkflow ───────────────────────────────────────────────────────────────
+
+class TestMVPWorkflow:
+    def _make_workflow(self, analyze_return):
+        wf = MVPWorkflow.__new__(MVPWorkflow)
+        wf.analyzer = MagicMock()
+        wf.analyzer.analyze.return_value = analyze_return
+        return wf
+
+    def test_happy_path(self):
+        wf = self._make_workflow({
+            "scenarios": [
+                {"scenario_id": "SCN-001", "title": "Valid login",
+                 "priority": "high", "type": "positive"}
+            ],
+            "requirements_summary": [{"id": "REQ-001", "text": "Login"}],
+            "missing_information": [],
+        })
+        result = wf.run("Login requirement")
+        assert len(result.scenarios) == 1
+        assert result.scenarios[0].scenario_id == "SCN-001"
+
+    def test_missing_scenarios_key_defaults_to_empty(self):
+        wf = self._make_workflow({"requirements_summary": []})
+        result = wf.run("Some req")
+        assert result.scenarios == []
+
+    def test_malformed_response_returns_fallback(self):
+        wf = self._make_workflow({"scenarios": "not-a-list"})
+        result = wf.run("Some req")
+        # Pydantic raises, fallback kicks in
+        assert result.scenarios == []
+        assert "unexpected response format" in result.missing_information[0].lower()
+
+    def test_missing_information_defaults(self):
+        wf = self._make_workflow({"scenarios": []})
+        result = wf.run("req")
+        assert result.missing_information == []
+
+    def test_requirements_summary_defaults(self):
+        wf = self._make_workflow({"scenarios": []})
+        result = wf.run("req")
+        assert result.requirements_summary == []
+
+
+# ── TestCasePayloadWorkflow grounding ─────────────────────────────────────────
+
+class TestGroundingValidation:
+    def _make_tc(self, tc_id, scenario_id, technique="EP"):
+        return TestCaseItem(
+            test_case_id=tc_id,
+            name="test",
+            scenario_id=scenario_id,
+            technique=technique,
+        )
+
+    def _scenarios(self, ids):
+        return [
+            ScenarioItem(scenario_id=sid, title=f"Scenario {sid}")
+            for sid in ids
+        ]
+
+    def test_drops_hallucinated_scenario_ids(self):
+        from backend.app.workflows.test_case_payload_workflow import TestCasePayloadWorkflow
+        wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+
+        from backend.app.schemas.agent_schemas import TestCasePayloadResult
+        result = TestCasePayloadResult(
+            test_cases=[
+                self._make_tc("TC-EP-001", "SCN-001"),
+                self._make_tc("TC-EP-002", "SCN-999"),  # hallucinated
+            ],
+        )
+        scenarios = self._scenarios(["SCN-001"])
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            wf._validate_grounding(scenarios, result)
+            assert any("dropped" in str(warning.message).lower() for warning in w)
+
+        assert len(result.test_cases) == 1
+        assert result.test_cases[0].scenario_id == "SCN-001"
+
+    def test_adds_fallback_for_uncovered_scenario(self):
+        from backend.app.workflows.test_case_payload_workflow import TestCasePayloadWorkflow
+        wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+
+        from backend.app.schemas.agent_schemas import TestCasePayloadResult
+        result = TestCasePayloadResult(
+            test_cases=[self._make_tc("TC-EP-001", "SCN-001")],
+        )
+        scenarios = self._scenarios(["SCN-001", "SCN-002"])
+
+        wf._validate_grounding(scenarios, result)
+
+        assert len(result.test_cases) == 2
+        covered = {tc.scenario_id for tc in result.test_cases}
+        assert "SCN-002" in covered
+        # Fallback must be a proper TestCaseItem, not a raw dict
+        fallback = next(tc for tc in result.test_cases if tc.scenario_id == "SCN-002")
+        assert isinstance(fallback, TestCaseItem)
+
+    def test_no_changes_when_all_covered(self):
+        from backend.app.workflows.test_case_payload_workflow import TestCasePayloadWorkflow
+        wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+
+        from backend.app.schemas.agent_schemas import TestCasePayloadResult
+        result = TestCasePayloadResult(
+            test_cases=[
+                self._make_tc("TC-EP-001", "SCN-001"),
+                self._make_tc("TC-EP-002", "SCN-002"),
+            ],
+        )
+        scenarios = self._scenarios(["SCN-001", "SCN-002"])
+
+        wf._validate_grounding(scenarios, result)
+        assert len(result.test_cases) == 2
+
+    def test_tc_with_none_scenario_id_is_kept(self):
+        from backend.app.workflows.test_case_payload_workflow import TestCasePayloadWorkflow
+        wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+
+        from backend.app.schemas.agent_schemas import TestCasePayloadResult
+        result = TestCasePayloadResult(
+            test_cases=[
+                self._make_tc("TC-EP-001", "SCN-001"),
+                self._make_tc("TC-UC-001", None),  # no scenario_id — allowed
+            ],
+        )
+        scenarios = self._scenarios(["SCN-001"])
+        wf._validate_grounding(scenarios, result)
+        assert len(result.test_cases) == 2
+
+
+# ── TC ID rebuild ─────────────────────────────────────────────────────────────
+
+class TestTCIdRebuild:
+    """Verify the post-processing loop in TestCasePayloadGenerator."""
+
+    def _rebuild(self, test_cases):
+        from typing import Dict
+        tech_counters: Dict[str, int] = {}
+        for tc in test_cases:
+            tech = (tc.get("technique") or "UC").upper()
+            tech_counters[tech] = tech_counters.get(tech, 0) + 1
+            tc["test_case_id"] = f"TC-{tech}-{tech_counters[tech]:03d}"
+            tc["technique"] = tech
+        return test_cases
+
+    def test_ids_follow_tc_technique_nnn_format(self):
+        tcs = [
+            {"technique": "EP", "name": "a"},
+            {"technique": "BVA", "name": "b"},
+            {"technique": "EP", "name": "c"},
+        ]
+        result = self._rebuild(tcs)
+        assert result[0]["test_case_id"] == "TC-EP-001"
+        assert result[1]["test_case_id"] == "TC-BVA-001"
+        assert result[2]["test_case_id"] == "TC-EP-002"
+
+    def test_null_technique_defaults_to_uc(self):
+        tcs = [{"technique": None, "name": "a"}]
+        result = self._rebuild(tcs)
+        assert result[0]["test_case_id"] == "TC-UC-001"
+        assert result[0]["technique"] == "UC"
+
+    def test_empty_technique_defaults_to_uc(self):
+        tcs = [{"technique": "", "name": "a"}]
+        result = self._rebuild(tcs)
+        assert result[0]["technique"] == "UC"
+
+    def test_technique_field_normalized_to_uppercase(self):
+        tcs = [{"technique": "ep", "name": "a"}]
+        result = self._rebuild(tcs)
+        assert result[0]["technique"] == "EP"
+
+    def test_counters_are_per_technique(self):
+        tcs = [{"technique": "EG"}, {"technique": "EG"}, {"technique": "EG"}]
+        result = self._rebuild(tcs)
+        ids = [tc["test_case_id"] for tc in result]
+        assert ids == ["TC-EG-001", "TC-EG-002", "TC-EG-003"]
+
+
+# ── _build_payload_templates ──────────────────────────────────────────────────
+
+class TestBuildPayloadTemplates:
+    def _wf(self):
+        return TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+
+    def _tc(self, tc_id, sid, test_data=None, technique="EP", priority="high", name="test"):
+        return TestCaseItem(
+            test_case_id=tc_id,
+            name=name,
+            scenario_id=sid,
+            technique=technique,
+            priority=priority,
+            test_data=test_data or {},
+        )
+
+    def _result(self, test_cases, payload_templates=None):
+        return TestCasePayloadResult(
+            test_cases=test_cases,
+            payload_templates=payload_templates or [],
+        )
+
+    def test_builds_from_test_data(self):
+        wf = self._wf()
+        result = self._result([
+            self._tc("TC-EP-001", "SCN-001", {"email": "a@b.com", "password": "123"}),
+        ])
+        wf._build_payload_templates(result)
+        assert len(result.payload_templates) == 1
+
+    def test_template_has_required_fields(self):
+        wf = self._wf()
+        result = self._result([
+            self._tc("TC-EP-001", "SCN-001", {"amount": 100}, technique="EP", priority="high", name="Pay"),
+        ])
+        wf._build_payload_templates(result)
+        tpl = result.payload_templates[0]
+        assert tpl["test_case_id"] == "TC-EP-001"
+        assert tpl["scenario_id"] == "SCN-001"
+        assert tpl["name"] == "Pay"
+        assert tpl["payload"] == {"amount": 100}
+        assert tpl["technique"] == "EP"
+        assert tpl["priority"] == "high"
+
+    def test_skips_tc_with_empty_test_data(self):
+        wf = self._wf()
+        result = self._result([
+            self._tc("TC-EP-001", "SCN-001", {}),
+            self._tc("TC-EP-002", "SCN-002", {"key": "val"}),
+        ])
+        wf._build_payload_templates(result)
+        assert len(result.payload_templates) == 1
+        assert result.payload_templates[0]["test_case_id"] == "TC-EP-002"
+
+    def test_skips_if_already_populated(self):
+        wf = self._wf()
+        existing = [{"test_case_id": "TC-EP-001", "payload": {"x": 1}}]
+        result = self._result(
+            [self._tc("TC-EP-001", "SCN-001", {"email": "new@b.com"})],
+            payload_templates=existing,
+        )
+        wf._build_payload_templates(result)
+        # Should not overwrite
+        assert result.payload_templates == existing
+
+    def test_empty_test_cases_gives_empty_templates(self):
+        wf = self._wf()
+        result = self._result([])
+        wf._build_payload_templates(result)
+        assert result.payload_templates == []
+
+    def test_multiple_tcs_all_with_data(self):
+        wf = self._wf()
+        result = self._result([
+            self._tc("TC-EP-001", "SCN-001", {"a": 1}),
+            self._tc("TC-BVA-001", "SCN-002", {"b": 2}),
+            self._tc("TC-EG-001", "SCN-003", {"c": 3}),
+        ])
+        wf._build_payload_templates(result)
+        assert len(result.payload_templates) == 3
+        ids = [t["test_case_id"] for t in result.payload_templates]
+        assert "TC-EP-001" in ids
+        assert "TC-BVA-001" in ids
+        assert "TC-EG-001" in ids

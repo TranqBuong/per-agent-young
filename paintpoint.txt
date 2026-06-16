@@ -1,0 +1,237 @@
+Multi-Agent Automation Engineer Requirement Specification
+====================================================
+
+1. Muc tieu cua bai toan
+------------------------
+Bai toan nay muon giai quyet van de: tester mat nhieu thoi gian de doc spec, suy luan testcase va viet automation code thu cong. Moi qua trinh nay de bi loi, lap lai va khong co traceability giua requirement -> testcase -> automation code.
+
+Giai phap duoc de xuat la mot he thong Multi-Agent Automation Engineer, gom 3 agent phoi hop voi nhau:
+- Agent 1: Requirement Analyzer
+- Agent 2: Test Case & Payload Generator
+- Agent 3: Automation Code Writer
+
+He thong nen co the lam viec tren cac nguon dau vao nhu:
+- Specs van ban
+- API Swagger/OpenAPI
+- User stories
+- Acceptance criteria
+- Database schema / domain rules
+- Mau payload hoac log thu nghiem
+
+2. Van de hien tai
+-----------------
+2.1. Tester phai doc specs bang tay va suy luan testcase.
+2.2. Viec viet test case thu cong rat cham va de bo qua negative cases.
+2.3. Viec viet automation code phuc tap, can nhieu boilerplate va lap lai.
+2.4. Khong co lien ket ro rang giua requirement va code automation.
+2.5. Doi voi cac luong phuc tap nhu thanh toan, luu thong tin, auth, workflow multi-step, payload can duoc cai thien va quan ly dung cach.
+
+3. Muc tieu cua he thong
+------------------------
+3.1. Tu dong phan tich requirement va trich xuat test scenarios.
+3.2. Tu dong sinh testcase voi positive/negative/edge cases.
+3.3. Tu dong sinh test data va payload JSON theo pattern Template + Override.
+3.4. Tu dong viet automation code theo framework cua du an.
+3.5. Giup tester va developer co the dieu chinh dau ra va duy tri traceability.
+3.6. Co the chay tren nhieu loai test: API, Web, Mobile, Performance.
+
+4. Yeu cau chuc nang
+--------------------
+4.1. Nguon dau vao
+- Chap nhan file van ban, markdown, PDF text, Swagger/OpenAPI, API contract.
+- Cho phep nguoi dung them context, business rules, constraints.
+
+4.2. Agent 1 - Requirement Analyzer
+- Doc va phan tich requirement, user story, API contract.
+- Trich xuat:
+  - Features
+  - Endpoints/flows
+  - Preconditions
+  - Input fields
+  - Validation rules
+  - Business rules
+  - Success criteria
+  - Error conditions
+- Sinh ra danh sach test scenarios theo format:
+  - Scenario ID
+  - Title
+  - Given / When / Then
+  - Type: Positive / Negative / Boundary / Security / Performance
+  - Priority
+  - Related requirement ID
+  - Related API endpoint
+
+4.3. Agent 2 - Test Case & Payload Generator
+- Dua tren scenarios, sinh testcase co cau truc:
+  - Test case ID
+  - Name
+  - Preconditions
+  - Steps
+  - Test data
+  - Expected result
+  - Priority
+  - Tags
+- Sinh test data theo loai:
+  - Valid data
+  - Invalid data
+  - Boundary data
+  - Null/empty data
+  - Special characters
+- Sinh payload JSON cho API test voi pattern:
+  - Template + Override
+  - Base payload template
+  - Per-scenario override rules
+  - Dynamic values (timestamp, UUID, random email, payment token)
+  - Masking / sanitization cho secret fields
+
+4.4. Agent 3 - Automation Code Writer
+- Chuyen testcase thanh automation code.
+- Ho tro nhieu framework:
+  - API: Python requests, pytest, Playwright API, k6, Postman/Newman
+  - Web: Playwright, Selenium
+  - Mobile: Appium
+  - Performance: k6
+- Sinh code co cau truc:
+  - Setup fixture
+  - Test case body
+  - Assertions
+  - Teardown
+  - Logging and reporting
+- Tu dong tao boilerplate code va chon framework theo config du an.
+
+4.5. Workflow dieu phoi
+- Input requirements -> Agent 1 -> Agent 2 -> Agent 3 -> Output artifacts.
+- Co the them Review Agent hoac Human-in-the-loop de xac nhan ket qua.
+- Ket qua co the duoc export ra JSON, YAML, Markdown, va source code.
+
+5. Yeu cau phi chuc nang
+----------------------
+5.1. Do chinh xac
+- Ket qua phai co the trace duoc toi requirement goc.
+- Can co mechanism de xac thuc negative cases va edge cases.
+
+5.2. Explainability
+- Moi output phai co ly do va nguon duoc trich xuat tu requirement.
+
+5.3. Khong lam thay doi y nghia cua requirement
+- He thong khong nen them logic khong co trong spec.
+
+5.4. Tinh linh hoat
+- Co the thiet lap framework, naming convention va coding style cho tung du an.
+
+5.5. Bao mat va an toan
+- Khong leak secret trong output.
+- Can co rule cho masked data and safe defaults.
+
+6. Use cases chinh
+-----------------
+UC1: Tu dong phan tich requirements va sinh scenarios
+UC2: Tu dong sinh test case va test data
+UC3: Tu dong sinh payload cho cac luong phuc tap
+UC4: Tu dong viet automation code tu testcase
+UC5: Review lai ket qua va chinh sua boi tester/developer
+
+7. Dau ra mong muon
+-------------------
+7.1. Output 1: danh sach scenarios
+7.2. Output 2: danh sach testcase
+7.3. Output 3: payload template va override rules
+7.4. Output 4: code automation complete
+7.5. Output 5: report traceability va coverage
+
+8. Cau truc du kien cua he thong
+------------------------------
+- Input Layer: docs, specs, swagger, API contracts
+- Orchestrator Layer: LangGraph/CrewAI workflow
+- Agent Layer:
+  - Requirement Analyzer
+  - Test Case & Payload Generator
+  - Automation Code Writer
+- Output Layer:
+  - JSON/YAML/Markdown reports
+  - Test code files
+  - Coverage traceability report
+
+9. Prompt design cho tung use case
+---------------------------------
+9.1. UC1 - Requirement Analyzer
+Prompt Step 1: Parse input documents
+- Nhiem vu: doc cac tap tin requirement/spec/swagger va tach thanh cac requirement item.
+- Yeu cau: phat hien endpoint, action, input, validation rule, expected result.
+- Dau ra: requirement summary JSON.
+
+Prompt Step 2: Extract scenarios
+- Nhiem vu: tu requirement summary, sinh danh sach scenarios cho positive, negative, boundary.
+- Yeu cau: moi scenario phai co title, given/when/then, priority, related requirement.
+- Dau ra: scenario list.
+
+Prompt Step 3: Validate coverage
+- Nhiem vu: kiem tra xem co bo sung missing flows hay not.
+- Yeu cau: neu thieu, yeu cau them context hoac de nghi follow-up.
+- Dau ra: coverage report.
+
+9.2. UC2 - Test Case & Payload Generator
+Prompt Step 1: Generate test cases from scenarios
+- Nhiem vu: chuyen scenario thanh test case co step va expected result.
+- Yeu cau: bao gom happy path, invalid input, edge condition, auth failure, permission failure.
+- Dau ra: testcase list.
+
+Prompt Step 2: Generate test data
+- Nhiem vu: tao test data cho tung testcase.
+- Yeu cau: co valid, invalid, boundary, empty, duplicate, special-character variants.
+- Dau ra: data matrix.
+
+Prompt Step 3: Build payload templates
+- Nhiem vu: tao payload template va rule override.
+- Yeu cau: dung pattern Template + Override, phan tach common fields va scenario-specific fields.
+- Dau ra: payload templates JSON.
+
+9.3. UC3 - Automation Code Writer
+Prompt Step 1: Select framework
+- Nhiem vu: chon framework tu config du an hoac yeu cau nguoi dung.
+- Yeu cau: neu khong co config, chon framework phu hop va ghi lai reason.
+- Dau ra: selected framework plan.
+
+Prompt Step 2: Generate boilerplate
+- Nhiem vu: tao file structure, fixtures, helper functions, base client.
+- Yeu cau: khong sinh code thua, dung naming convention cua du an.
+- Dau ra: scaffold code.
+
+Prompt Step 3: Generate test implementation
+- Nhiem vu: viet code cho tung testcase.
+- Yeu cau: bao gom setup, assertion, teardown, logging.
+- Dau ra: automation source files.
+
+Prompt Step 4: Validate syntax and structure
+- Nhiem vu: kiem tra code co syntax hop le khong.
+- Yeu cau: neu co loi, sua va tra ve code da duoc chinh sua.
+- Dau ra: validated code output.
+
+9.4. UC4 - Human Review / Refinement Loop
+Prompt Step 1: Review generated output
+- Nhiem vu: danh gia testcase, payload va code.
+- Yeu cau: neu co thieu so, yeu cau bo sung context hoac chinh sua output.
+- Dau ra: review feedback.
+
+Prompt Step 2: Regenerate with feedback
+- Nhiem vu: chinh sua ket qua dua tren feedback.
+- Yeu cau: giu nguyen traceability va khong lam mat requirement coverage.
+- Dau ra: updated artifacts.
+
+10. De xuat phuong an thuc thi
+----------------------------
+- Su dung LangGraph hoac CrewAI de dieu phoi 3 agent.
+- Moi agent co mot prompt template rieng.
+- Moi output can duoc luu thanh artifact de tiep tuc su dung.
+- Nen co mot schema chuan cho requirement, scenario, testcase, payload va automation code.
+- Nen co mode human-in-the-loop de xac nhan truoc khi export code.
+
+11. Ket luan
+-----------
+He thong Multi-Agent Automation Engineer se giup rut ngan thoi gian chuyen tu requirement sang testcase va automation code, tang do dong bo va giam sai sot. Mot he thong tot can co:
+- input understanding,
+- scenario extraction,
+- payload generation,
+- code generation,
+- traceability,
+- review loop.

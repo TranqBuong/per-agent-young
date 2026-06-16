@@ -1,0 +1,2468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Multi-Agent Quality Engineer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #060d1b;
+      --bg2:       #0a1628;
+      --surface:   #0d1f38;
+      --surface2:  #122440;
+      --border:    rgba(255,255,255,0.07);
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --dim:       #94a3b8;
+      --blue:      #38bdf8;
+      --blue-glow: rgba(56,189,248,0.18);
+      --indigo:    #818cf8;
+      --green:     #34d399;
+      --green-glow:rgba(52,211,153,0.18);
+      --amber:     #fbbf24;
+      --rose:      #f87171;
+      --purple:    #a78bfa;
+      --r:         16px;
+      --r-sm:      10px;
+      --t:         0.25s cubic-bezier(.4,0,.2,1);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 15% 15%, rgba(56,189,248,.06) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 60% at 85% 85%, rgba(129,140,248,.06) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 40% at 50% 50%, rgba(52,211,153,.03) 0%, transparent 70%);
+      animation: ambient 16s ease-in-out infinite alternate;
+      pointer-events: none; z-index: 0;
+    }
+    @keyframes ambient {
+      from { opacity: 1; transform: scale(1); }
+      to   { opacity: .7; transform: scale(1.04); }
+    }
+
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 28px 0 0; margin-bottom: 32px;
+    }
+    .logo { display: flex; align-items: center; gap: 14px; }
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--blue), var(--indigo));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 28px var(--blue-glow);
+    }
+    .logo-text h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.2; }
+    .logo-text span { font-size: 0.78rem; color: var(--muted); }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .zalopay-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px 6px 8px;
+      background: rgba(0,104,255,.10);
+      border: 1px solid rgba(0,104,255,.28);
+      border-radius: 999px;
+      font-size: 0.73rem; color: #60a5fa;
+      letter-spacing: .02em;
+    }
+    .zalopay-badge span { opacity: .7; margin-right: 1px; }
+    .status-pill {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 16px;
+      background: rgba(52,211,153,.08);
+      border: 1px solid rgba(52,211,153,.2);
+      border-radius: 999px;
+      font-size: 0.78rem; color: var(--green);
+    }
+    .dot {
+      width: 7px; height: 7px;
+      background: var(--green); border-radius: 50%;
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.75)} }
+
+    /* ── Hero ── */
+    .hero { text-align: center; padding: 0 0 28px; }
+    .hero-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 18px;
+      background: rgba(56,189,248,.07);
+      border: 1px solid rgba(56,189,248,.18);
+      border-radius: 999px;
+      font-size: 0.78rem; color: var(--blue);
+      margin-bottom: 14px; letter-spacing: .4px;
+    }
+    .hero h2 {
+      font-size: clamp(1.7rem, 3.5vw, 2.4rem);
+      font-weight: 800; letter-spacing: -.03em; line-height: 1.1;
+      background: linear-gradient(140deg, #fff 20%, #94a3b8 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    /* ── Pipeline horizontal ── */
+    .pipeline {
+      display: grid;
+      grid-template-columns: 1fr 52px 1fr 52px 1fr;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 24px;
+      background: none;
+      border: none;
+    }
+    .pipeline-arrow {
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .pipeline-arrow::before {
+      content: '';
+      position: absolute;
+      height: 2px; width: 100%;
+      background: var(--border);
+    }
+    .pipeline-arrow::after {
+      content: '›';
+      font-size: 1.4rem; color: var(--muted);
+      position: relative; z-index: 1;
+      background: var(--bg);
+      padding: 0 6px;
+      transition: color var(--t);
+    }
+    .pipeline-arrow.active::after { color: var(--blue); }
+    .pipeline-arrow.done::after   { color: var(--green); }
+
+    .agent-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 20px 16px;
+      text-align: center;
+      transition: all var(--t);
+      position: relative;
+      overflow: hidden;
+    }
+    .agent-card::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, transparent 60%, rgba(255,255,255,.02));
+      pointer-events: none;
+    }
+    .agent-card.processing {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 1px var(--blue), 0 0 40px var(--blue-glow);
+      animation: glow-blue 2s ease-in-out infinite;
+    }
+    .agent-card.done  { border-color: var(--green); box-shadow: 0 0 24px var(--green-glow); }
+    .agent-card.error { border-color: var(--rose);  box-shadow: 0 0 24px rgba(248,113,113,.15); }
+    @keyframes glow-blue {
+      0%,100% { box-shadow: 0 0 0 1px var(--blue), 0 0 24px var(--blue-glow); }
+      50%      { box-shadow: 0 0 0 1px var(--blue), 0 0 48px rgba(56,189,248,.3); }
+    }
+    .agent-card .agent-num {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--surface2); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .82rem; font-weight: 700; color: var(--muted);
+      margin: 0 auto 12px;
+      transition: all var(--t);
+    }
+    .agent-card.processing .agent-num { background: var(--blue); border-color: var(--blue); color: #fff; animation: spin .9s linear infinite; }
+    .agent-card.done  .agent-num { background: var(--green); border-color: var(--green); color: #fff; }
+    .agent-card.error .agent-num { background: var(--rose);  border-color: var(--rose);  color: #fff; }
+    .agent-card h3 { font-size: .87rem; font-weight: 700; margin-bottom: 4px; }
+    .agent-card p  { font-size: .74rem; color: var(--muted); margin-bottom: 12px; line-height: 1.4; }
+    .agent-card .agent-badge {
+      display: inline-block;
+      padding: 3px 12px; border-radius: 999px;
+      font-size: .7rem;
+      background: var(--bg2); color: var(--muted);
+      transition: all var(--t);
+    }
+    .agent-card.processing .agent-badge { background: rgba(56,189,248,.1);  color: var(--blue);  }
+    .agent-card.done        .agent-badge { background: rgba(52,211,153,.1);  color: var(--green); }
+    .agent-card.error       .agent-badge { background: rgba(248,113,113,.1); color: var(--rose);  }
+
+    /* ── Two-column layout ── */
+    .split {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    /* ── Left panel ── */
+    .left-panel {
+      display: flex; flex-direction: column; gap: 20px;
+    }
+
+    /* ── Input card ── */
+    .input-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 22px;
+    }
+    .input-top {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .input-top h3 { font-size: .95rem; font-weight: 700; }
+    .char-count { font-size: .76rem; color: var(--muted); }
+
+    textarea {
+      width: 100%; min-height: 220px;
+      padding: 14px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text); font: inherit; font-size: .88rem;
+      resize: vertical; outline: none;
+      transition: border-color var(--t), box-shadow var(--t);
+    }
+    textarea:focus {
+      border-color: rgba(56,189,248,.35);
+      box-shadow: 0 0 0 3px rgba(56,189,248,.07);
+    }
+    textarea::placeholder { color: var(--muted); }
+
+    /* ── Input mode tabs ── */
+    .input-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .input-tab {
+      padding: 5px 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--dim); font: inherit; font-size: .78rem;
+      cursor: pointer; transition: all var(--t);
+    }
+    .input-tab.active { background: rgba(56,189,248,.1); border-color: rgba(56,189,248,.4); color: var(--blue); font-weight: 600; }
+    .input-tab:hover:not(.active) { color: var(--text); border-color: rgba(255,255,255,.2); }
+    .file-drop {
+      border: 2px dashed var(--border); border-radius: var(--r-sm);
+      padding: 44px 20px; text-align: center;
+      cursor: pointer; transition: all var(--t);
+      color: var(--muted); font-size: .88rem; user-select: none;
+    }
+    .file-drop:hover, .file-drop.drag-over {
+      border-color: rgba(56,189,248,.45); background: rgba(56,189,248,.04); color: var(--text);
+    }
+    .file-drop .drop-icon { font-size: 1.6rem; display: block; margin-bottom: 8px; }
+    .file-drop .drop-hint { display: block; font-size: .74rem; color: var(--muted); margin-top: 6px; }
+    .url-row { display: flex; gap: 8px; }
+    .url-input {
+      flex: 1; padding: 11px 14px; border-radius: var(--r-sm);
+      border: 1px solid var(--border); background: var(--bg2);
+      color: var(--text); font: inherit; font-size: .88rem; outline: none;
+      transition: border-color var(--t);
+    }
+    .url-input:focus { border-color: rgba(56,189,248,.35); box-shadow: 0 0 0 3px rgba(56,189,248,.07); }
+    .url-input::placeholder { color: var(--muted); }
+    .url-fetch-btn {
+      padding: 11px 18px; border-radius: var(--r-sm);
+      border: 1px solid rgba(56,189,248,.3); background: rgba(56,189,248,.08);
+      color: var(--blue); font: inherit; font-size: .85rem; font-weight: 600;
+      cursor: pointer; white-space: nowrap; transition: all var(--t);
+    }
+    .url-fetch-btn:hover:not(:disabled) { background: rgba(56,189,248,.16); }
+    .url-fetch-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .url-status { font-size: .76rem; min-height: 20px; margin-top: 8px; }
+
+    .fw-group { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+    .fw-label { font-size: .75rem; color: var(--muted); }
+    .fw-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .fw-pill {
+      padding: 4px 12px; border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg2); color: var(--muted);
+      font: inherit; font-size: .76rem; cursor: pointer;
+      transition: all var(--t); white-space: nowrap;
+    }
+    .fw-pill:hover    { border-color: rgba(56,189,248,.3); color: var(--blue); }
+    .fw-pill.active   { border-color: var(--blue); background: rgba(56,189,248,.1); color: var(--blue); font-weight: 700; }
+
+    .run-btn {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; margin-top: 14px;
+      padding: 13px 24px; border-radius: 999px; border: none;
+      background: linear-gradient(135deg, var(--blue), var(--indigo));
+      color: #fff; font: inherit; font-size: .92rem; font-weight: 700;
+      cursor: pointer;
+      transition: all var(--t);
+      box-shadow: 0 4px 20px rgba(56,189,248,.25);
+    }
+    .run-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(56,189,248,.35); }
+    .run-btn:active:not(:disabled){ transform: translateY(0); }
+    .run-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .spinner {
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin .7s linear infinite;
+      display: none;
+    }
+    .run-btn.loading .btn-icon { display: none; }
+    .run-btn.loading .spinner   { display: block; }
+
+    .action-row { display: flex; gap: 8px; margin-top: 10px; }
+    .cancel-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 11px 0; border-radius: 999px;
+      border: 1px solid rgba(248,113,113,.3); background: rgba(248,113,113,.06);
+      color: var(--rose); font: inherit; font-size: .85rem; font-weight: 600;
+      cursor: pointer; transition: all var(--t);
+    }
+    .cancel-btn:hover:not(:disabled) { background: rgba(248,113,113,.14); border-color: rgba(248,113,113,.5); }
+    .cancel-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .retry-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 11px 0; border-radius: 999px;
+      border: 1px solid rgba(251,191,36,.3); background: rgba(251,191,36,.06);
+      color: var(--amber); font: inherit; font-size: .85rem; font-weight: 600;
+      cursor: pointer; transition: all var(--t);
+    }
+    .retry-btn:hover { background: rgba(251,191,36,.14); border-color: rgba(251,191,36,.5); }
+
+    /* ── Right panel ── */
+    .right-panel { display: flex; flex-direction: column; gap: 20px; min-width: 0; overflow: hidden; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; gap: 16px;
+      background: var(--surface);
+      border: 1px dashed rgba(255,255,255,.1);
+      border-radius: var(--r);
+      padding: 60px 40px;
+      height: 100%;
+      box-sizing: border-box;
+    }
+    .empty-icon {
+      font-size: 3rem; opacity: .35;
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-8px); }
+    }
+    .empty-state h3 { font-size: 1rem; font-weight: 600; color: var(--dim); }
+    .empty-state p  { font-size: .82rem; color: var(--muted); max-width: 280px; }
+
+    /* ── Metrics ── */
+    .metrics {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 12px;
+    }
+    .metric {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 18px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .metric-ico {
+      width: 42px; height: 42px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; flex-shrink: 0;
+    }
+    .metric-ico.blue   { background: rgba(56,189,248,.1); }
+    .metric-ico.green  { background: rgba(52,211,153,.1); }
+    .metric-ico.purple { background: rgba(167,139,250,.1); }
+    .metric-val {
+      font-size: 1.8rem; font-weight: 800; line-height: 1;
+      margin-bottom: 2px; font-variant-numeric: tabular-nums;
+    }
+    .metric-val.blue   { color: var(--blue); }
+    .metric-val.green  { color: var(--green); }
+    .metric-val.purple { color: var(--purple); }
+    .metric-lbl { font-size: .74rem; color: var(--muted); }
+
+    /* ── Error ── */
+    .err-box {
+      display: none;
+      background: rgba(248,113,113,.07);
+      border: 1px solid rgba(248,113,113,.25);
+      border-radius: var(--r);
+      padding: 14px 18px;
+      color: var(--rose); font-size: .875rem;
+      gap: 12px; align-items: flex-start;
+    }
+    .err-box.show { display: flex; animation: fadeIn .3s ease; }
+
+    /* ── Results ── */
+    .results { display: none; }
+    .results.show { display: block; animation: fadeIn .4s ease; }
+
+    @keyframes fadeIn {
+      from { opacity:0; transform:translateY(8px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    .tabs-nav {
+      display: flex; gap: 4px;
+      padding: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      margin-bottom: 16px;
+      width: fit-content;
+      position: sticky; top: 12px; z-index: 50;
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    }
+    .tab-btn {
+      padding: 7px 20px; border-radius: calc(var(--r) - 4px);
+      border: none; background: transparent;
+      color: var(--muted); font: inherit; font-size: .83rem;
+      cursor: pointer; transition: all var(--t); white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--surface2); color: var(--text); font-weight: 700;
+      box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    }
+    .tab-count {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 18px; height: 18px; padding: 0 5px;
+      border-radius: 999px;
+      background: rgba(56,189,248,.12); color: var(--blue);
+      font-size: .68rem; font-weight: 700; margin-left: 6px;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; animation: fadeIn .25s ease; }
+
+    /* ── Skeleton loading ── */
+    @keyframes skel-pulse { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .skel-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:20px; margin-bottom:10px; }
+    .skel-line { height:11px; border-radius:6px; margin-bottom:9px; background:linear-gradient(90deg,var(--surface2) 25%,rgba(255,255,255,.05) 50%,var(--surface2) 75%); background-size:200% 100%; animation:skel-pulse 1.4s ease infinite; }
+
+    /* ── TC filter bar ── */
+    .tc-filter-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); margin-bottom:14px; }
+    .tc-search { flex:1; min-width:180px; padding:7px 12px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; color:var(--text); font:inherit; font-size:.82rem; outline:none; transition:border-color var(--t); }
+    .tc-search:focus { border-color:var(--blue); }
+    .tc-search::placeholder { color:var(--muted); }
+    .tc-filter-pills { display:flex; gap:5px; flex-wrap:wrap; }
+    .tc-pill { padding:4px 11px; border-radius:999px; font-size:.72rem; font-weight:700; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--muted); transition:all var(--t); }
+    .tc-pill:hover { color:var(--text); }
+    .tc-pill.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .tc-filter-label { font-size:.72rem; color:var(--muted); white-space:nowrap; }
+    .tc-filter-count { font-size:.76rem; color:var(--muted); margin-left:auto; white-space:nowrap; }
+
+    /* ── Code empty state ── */
+    .code-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; color:var(--muted); gap:12px; }
+    .code-empty-icon { font-size:2.5rem; opacity:.4; }
+    .code-empty p { font-size:.85rem; color:var(--muted); text-align:center; }
+
+    /* ── Scenario cards ── */
+    .s-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 20px;
+      margin-bottom: 10px;
+      animation: fadeIn .35s ease both;
+      transition: border-color var(--t), box-shadow var(--t), transform var(--t);
+    }
+    .s-card:hover {
+      border-color: rgba(255,255,255,.12);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 28px rgba(0,0,0,.2);
+    }
+    .s-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 14px; margin-bottom: 14px;
+    }
+    .s-head h4 { font-size: .92rem; font-weight: 700; margin-bottom: 4px; line-height: 1.3; }
+    .s-id { font-size: .72rem; color: var(--muted); font-family: monospace; }
+    .badges { display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
+    .bdg {
+      padding: 3px 10px; border-radius: 999px;
+      font-size: .68rem; font-weight: 600; white-space: nowrap;
+    }
+    .bdg.positive   { background: rgba(52,211,153,.1);  color: var(--green);  }
+    .bdg.negative   { background: rgba(248,113,113,.1); color: var(--rose);   }
+    .bdg.boundary   { background: rgba(251,191,36,.1);  color: var(--amber);  }
+    .bdg.security   { background: rgba(167,139,250,.1); color: var(--purple); }
+    .bdg.performance{ background: rgba(56,189,248,.1);  color: var(--blue);   }
+    .bdg.high   { background: rgba(248,113,113,.08); color: var(--rose);  }
+    .bdg.medium { background: rgba(251,191,36,.08);  color: var(--amber); }
+    .bdg.low    { background: rgba(100,116,139,.12); color: var(--muted); }
+    .bdg.ep     { background: rgba(129,140,248,.1);  color: var(--indigo); font-family: monospace; font-size: .67rem; }
+    .bdd { display: grid; gap: 7px; }
+    .bdd-row { display: flex; align-items: flex-start; gap: 10px; font-size: .86rem; }
+    .kw {
+      font-size: .67rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; padding: 2px 8px; border-radius: 4px;
+      white-space: nowrap; margin-top: 3px; flex-shrink: 0;
+    }
+    .kw.g { background: rgba(56,189,248,.1);  color: var(--blue);  }
+    .kw.w { background: rgba(251,191,36,.1);  color: var(--amber); }
+    .kw.t { background: rgba(52,211,153,.1);  color: var(--green); }
+    .bdd-txt { color: var(--dim); line-height: 1.5; }
+
+    /* ── Generate TC bar ── */
+    .gen-tc-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 14px 18px; margin-bottom: 14px;
+      background: rgba(99,102,241,.05); border: 1px solid rgba(99,102,241,.2);
+      border-radius: var(--r);
+    }
+    .gen-tc-bar p { font-size: .84rem; color: var(--dim); margin: 0; }
+    .gen-tc-btn {
+      flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+      padding: 9px 22px; border-radius: 999px; border: none;
+      background: linear-gradient(135deg, var(--indigo), var(--blue));
+      color: #fff; font: inherit; font-size: .85rem; font-weight: 700;
+      cursor: pointer; transition: all var(--t);
+      box-shadow: 0 3px 14px rgba(99,102,241,.25);
+    }
+    .gen-tc-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Add scenario ── */
+    .add-scn-toggle {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      width: 100%; margin-top: 10px; padding: 11px;
+      border-radius: 999px; border: 2px dashed var(--border);
+      background: transparent; color: var(--dim); font: inherit; font-size: .83rem;
+      cursor: pointer; transition: all var(--t);
+    }
+    .add-scn-toggle:hover { border-color: rgba(56,189,248,.4); color: var(--blue); background: rgba(56,189,248,.04); }
+    .add-scn-form-wrap {
+      margin-top: 10px; padding: 18px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    }
+    .add-scn-form-wrap h4 { font-size: .88rem; font-weight: 700; margin-bottom: 14px; }
+    .scn-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .scn-form-full { grid-column: 1 / -1; }
+    .scn-field label { display: block; font-size: .71rem; color: var(--muted); margin-bottom: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .scn-field input, .scn-field select, .scn-field textarea {
+      width: 100%; padding: 9px 12px; border-radius: var(--r-sm);
+      border: 1px solid var(--border); background: var(--bg2);
+      color: var(--text); font: inherit; font-size: .84rem; outline: none;
+      transition: border-color var(--t); box-sizing: border-box;
+    }
+    .scn-field input:focus, .scn-field select:focus, .scn-field textarea:focus { border-color: rgba(56,189,248,.4); }
+    .scn-field textarea { resize: vertical; min-height: 52px; }
+    .scn-field select option { background: var(--surface); }
+    .add-scn-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .btn-add-scn {
+      padding: 9px 22px; border-radius: 999px; border: none;
+      background: linear-gradient(135deg, var(--blue), var(--indigo));
+      color: #fff; font: inherit; font-size: .84rem; font-weight: 700; cursor: pointer;
+    }
+    .btn-cancel-scn {
+      padding: 9px 18px; border-radius: 999px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--dim); font: inherit; font-size: .84rem; cursor: pointer;
+      transition: all var(--t);
+    }
+    .btn-cancel-scn:hover { color: var(--text); }
+
+    /* manual scenario card */
+    .s-card.manual { border-left: 3px solid var(--amber); }
+    .s-manual-tag {
+      display: inline-flex; align-items: center; padding: 1px 7px;
+      font-size: .67rem; font-weight: 700;
+      background: rgba(251,191,36,.1); color: var(--amber);
+      border-radius: 4px; border: 1px solid rgba(251,191,36,.25); margin-left: 6px;
+    }
+    .s-del-btn {
+      padding: 3px 9px; border-radius: 4px;
+      border: 1px solid rgba(248,113,113,.3); background: transparent;
+      color: var(--rose); font-size: .72rem; cursor: pointer;
+      transition: all var(--t); flex-shrink: 0; align-self: flex-start;
+    }
+    .s-del-btn:hover { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.5); }
+    .s-edit-btn {
+      padding: 3px 9px; border-radius: 4px;
+      border: 1px solid rgba(56,189,248,.3); background: transparent;
+      color: var(--blue); font-size: .72rem; cursor: pointer;
+      transition: all var(--t); flex-shrink: 0; align-self: flex-start;
+    }
+    .s-edit-btn:hover { background: rgba(56,189,248,.08); border-color: rgba(56,189,248,.5); }
+    .s-edit-form { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+    .s-edit-row { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: flex-start; }
+    .s-edit-label { font-size: .72rem; font-weight: 700; color: var(--muted); padding-top: 7px; }
+    .s-edit-input, .s-edit-textarea, .s-edit-select {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 7px;
+      color: var(--text); font: inherit; font-size: .82rem; padding: 6px 10px;
+      outline: none; transition: border-color var(--t); width: 100%; box-sizing: border-box;
+    }
+    .s-edit-input:focus, .s-edit-textarea:focus, .s-edit-select:focus { border-color: var(--blue); }
+    .s-edit-textarea { resize: vertical; min-height: 52px; }
+    .s-edit-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+    .s-save-btn {
+      padding: 5px 16px; border-radius: 7px; border: none;
+      background: var(--blue); color: #fff; font: inherit; font-size: .8rem;
+      font-weight: 700; cursor: pointer; transition: opacity var(--t);
+    }
+    .s-save-btn:hover { opacity: .85; }
+    .s-cancel-edit-btn {
+      padding: 5px 14px; border-radius: 7px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); font: inherit; font-size: .8rem; cursor: pointer;
+      transition: all var(--t);
+    }
+    .s-cancel-edit-btn:hover { color: var(--text); border-color: var(--dim); }
+
+    /* ── Test case cards ── */
+    .tc {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+      margin-bottom: 9px;
+      animation: fadeIn .35s ease both;
+      transition: border-color var(--t);
+    }
+    .tc:hover { border-color: rgba(255,255,255,.11); }
+    .tc-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; cursor: pointer; gap: 12px;
+      user-select: none;
+    }
+    .tc-head:hover { background: rgba(255,255,255,.02); }
+    .tc-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .tc-cid { font-size: .68rem; font-family: monospace; color: var(--muted); white-space: nowrap; }
+    .tc-name { font-size: .87rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chev { color: var(--muted); font-size: .7rem; transition: transform var(--t); flex-shrink: 0; }
+    .tc.open .chev { transform: rotate(180deg); }
+    .tc-body {
+      display: none; padding: 18px;
+      border-top: 1px solid var(--border);
+    }
+    .tc.open .tc-body { display: block; animation: fadeIn .2s ease; }
+    .sect { margin-bottom: 14px; }
+    .sect-lbl {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); margin-bottom: 7px;
+    }
+    .steps { list-style: none; display: grid; gap: 4px; }
+    .steps li {
+      font-size: .85rem; color: var(--dim);
+      padding: 7px 12px;
+      background: var(--bg2); border-radius: 7px;
+      border-left: 2px solid rgba(56,189,248,.3);
+    }
+    .expected { font-size: .85rem; color: var(--green); }
+    .data-block {
+      font-size: .74rem; color: var(--dim);
+      padding: 12px; background: var(--bg2);
+      border-radius: 8px; overflow: auto;
+      white-space: pre-wrap; font-family: monospace;
+      max-height: 160px;
+    }
+    .tag { padding: 2px 9px; border-radius: 999px; font-size: .67rem; font-weight: 600; background: rgba(255,255,255,.06); color: var(--dim); }
+
+    /* ── Code files ── */
+    .code-file {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+      margin-bottom: 12px;
+      animation: fadeIn .35s ease both;
+      width: 100%; box-sizing: border-box;
+    }
+    .code-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; cursor: pointer; gap: 12px;
+      user-select: none; transition: background var(--t);
+    }
+    .code-head:hover { background: rgba(255,255,255,.02); }
+    .code-body {
+      display: none;
+      border-top: 1px solid var(--border);
+      max-height: 360px;
+      overflow: auto;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .code-file.open .code-body { display: block; animation: fadeIn .2s ease; }
+    .code-body::-webkit-scrollbar { width: 6px; }
+    .code-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
+    .code-file.open .chev { transform: rotate(180deg); }
+    .code-lines { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+    .code-meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .lang-badge {
+      padding: 2px 9px; border-radius: 5px;
+      background: rgba(129,140,248,.12); color: var(--indigo);
+      font-size: .68rem; font-weight: 700; font-family: monospace; white-space: nowrap;
+    }
+    .fname { font-size: .83rem; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .copy-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 999px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); font: inherit; font-size: .74rem;
+      cursor: pointer; transition: all var(--t); white-space: nowrap; flex-shrink: 0;
+    }
+    .copy-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .copy-btn.ok    { border-color: var(--green); color: var(--green); }
+    .explanation {
+      padding: 9px 18px; font-size: .78rem; color: var(--muted);
+      border-bottom: 1px solid rgba(255,255,255,.06); line-height: 1.5;
+    }
+    .code-file pre { margin: 0; font-size: .8rem; line-height: 1.65; white-space: pre; }
+    .code-file pre::-webkit-scrollbar { width: 6px; height: 6px; }
+    .code-file pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
+    .hljs { background: #090f1c !important; padding: 18px !important; }
+
+    /* ── Phase 1: Preview ── */
+    .preview-panel { display: none; animation: fadeIn .4s ease; }
+    .preview-panel.show { display: block; }
+
+    .overview-card {
+      background: var(--surface); border: 1px solid rgba(56,189,248,.2);
+      border-radius: var(--r); padding: 22px; margin-bottom: 16px;
+    }
+    .overview-card h3 {
+      font-size: .82rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--blue); margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .overview-summary {
+      font-size: .92rem; color: var(--text); line-height: 1.65;
+      margin-bottom: 16px; padding: 14px;
+      background: rgba(56,189,248,.04); border-radius: 10px;
+      border-left: 3px solid var(--blue);
+    }
+    .overview-section { margin-bottom: 14px; }
+    .overview-section:last-child { margin-bottom: 0; }
+    .ov-label {
+      font-size: .7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--muted); margin-bottom: 7px;
+    }
+    .ov-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ov-tag {
+      padding: 4px 12px; border-radius: 999px; font-size: .78rem;
+      background: var(--surface2); color: var(--dim);
+      border: 1px solid var(--border);
+    }
+    .ov-tag.endpoint {
+      background: rgba(129,140,248,.08); color: var(--indigo);
+      border-color: rgba(129,140,248,.2); font-family: monospace; font-size: .75rem;
+    }
+
+    .suggestions-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 22px; margin-bottom: 20px;
+    }
+    .suggestions-card h3 {
+      font-size: .82rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--amber); margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .no-suggestions {
+      font-size: .86rem; color: var(--green);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .suggestion-item {
+      display: flex; gap: 12px; padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .suggestion-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .sug-icon {
+      width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: .85rem;
+    }
+    .sug-icon.missing     { background: rgba(248,113,113,.1); }
+    .sug-icon.improvement { background: rgba(56,189,248,.1); }
+    .sug-icon.ambiguity   { background: rgba(251,191,36,.1); }
+    .sug-body { flex: 1; min-width: 0; }
+    .sug-title { font-size: .87rem; font-weight: 700; margin-bottom: 3px; }
+    .sug-desc  { font-size: .8rem; color: var(--dim); line-height: 1.5; }
+    .sug-type-badge {
+      display: inline-block; padding: 1px 8px; border-radius: 4px;
+      font-size: .65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; margin-right: 6px; vertical-align: middle;
+    }
+    .sug-type-badge.missing     { background: rgba(248,113,113,.12); color: var(--rose); }
+    .sug-type-badge.improvement { background: rgba(56,189,248,.12);  color: var(--blue); }
+    .sug-type-badge.ambiguity   { background: rgba(251,191,36,.12);  color: var(--amber); }
+
+    /* ── Quality Score card ── */
+    .qs-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 20px; margin-bottom: 16px;
+    }
+    .qs-card h3 { margin: 0 0 16px; font-size: .9rem; font-weight: 700; display:flex; align-items:center; gap:8px; }
+    .qs-overall {
+      display: flex; align-items: center; gap: 16px; margin-bottom: 18px;
+      padding: 14px 18px; border-radius: 10px; background: var(--bg2);
+    }
+    .qs-overall-score {
+      font-size: 2.4rem; font-weight: 900; line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .qs-overall-label { font-size: .76rem; color: var(--muted); margin-top: 2px; }
+    .qs-risk-badge {
+      margin-left: auto; padding: 5px 14px; border-radius: 999px;
+      font-size: .75rem; font-weight: 800; letter-spacing: .04em;
+    }
+    .qs-risk-badge.high   { background: rgba(248,113,113,.15); color: var(--rose); border: 1px solid rgba(248,113,113,.25); }
+    .qs-risk-badge.medium { background: rgba(251,191,36,.12);  color: var(--amber); border: 1px solid rgba(251,191,36,.25); }
+    .qs-risk-badge.low    { background: rgba(52,211,153,.12);  color: var(--green); border: 1px solid rgba(52,211,153,.25); }
+    .qs-metrics { display: grid; gap: 14px; }
+    .qs-dim { display: grid; gap: 5px; }
+    .qs-row { display: flex; align-items: center; gap: 12px; }
+    .qs-row-label { font-size: .8rem; color: var(--dim); width: 110px; flex-shrink: 0; }
+    .qs-bar-wrap { flex: 1; height: 7px; background: var(--bg2); border-radius: 999px; overflow: hidden; }
+    .qs-bar { height: 100%; border-radius: 999px; transition: width .6s ease; }
+    .qs-row-val { font-size: .82rem; font-weight: 700; width: 38px; text-align: right; flex-shrink: 0; }
+    .qs-evidence { list-style: none; padding: 0 0 0 114px; margin: 0; display: grid; gap: 2px; }
+    .qs-evidence li { font-size: .73rem; line-height: 1.4; }
+    .ev-found     { color: #34d399; }
+    .ev-missing   { color: #f87171; }
+    .ev-deduction { color: #fbbf24; }
+    .qs-formula { font-size: .72rem; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-family: monospace; letter-spacing: .01em; }
+    .badge.edge-case { background: rgba(168,85,247,.15); color: #c084fc; border-color: rgba(168,85,247,.35); }
+    .missing-info-panel { background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.25); border-radius: var(--r); padding: 14px 18px; margin-bottom: 14px; }
+    .missing-info-panel h4 { margin: 0 0 8px; font-size: .78rem; font-weight: 700; color: var(--amber); text-transform: uppercase; letter-spacing: .06em; }
+    .missing-info-panel ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+    .missing-info-panel li { font-size: .82rem; color: var(--dim); }
+    .tc-coverage-strip { display: flex; align-items: center; gap: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 18px; margin-bottom: 14px; flex-wrap: wrap; }
+    .tc-cov-item { display: flex; align-items: baseline; gap: 5px; }
+    .tc-cov-val { font-size: .95rem; font-weight: 800; color: var(--text); }
+    .tc-cov-label { font-size: .75rem; color: var(--muted); }
+    .pager { display: flex; align-items: center; gap: 4px; justify-content: center; padding: 18px 0 4px; flex-wrap: wrap; }
+    .pager-btn { min-width: 32px; height: 32px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--dim); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; transition: all var(--t); }
+    .pager-btn:hover:not(:disabled) { background: var(--bg2); color: var(--text); border-color: var(--blue); }
+    .pager-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .pager-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .pager-info { font-size: .75rem; color: var(--muted); margin-left: 6px; }
+
+    .confirm-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; padding: 18px 22px;
+      background: rgba(52,211,153,.05);
+      border: 1px solid rgba(52,211,153,.2);
+      border-radius: var(--r);
+      margin-bottom: 20px;
+    }
+    .confirm-bar p { font-size: .85rem; color: var(--dim); }
+    .confirm-bar strong { color: var(--green); }
+    .confirm-btn {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+      padding: 11px 28px; border-radius: 999px; border: none;
+      background: linear-gradient(135deg, var(--green), #059669);
+      color: #fff; font: inherit; font-size: .9rem; font-weight: 700;
+      cursor: pointer; transition: all var(--t);
+      box-shadow: 0 4px 20px rgba(52,211,153,.25);
+    }
+    .confirm-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 28px rgba(52,211,153,.35); }
+    .confirm-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── RTM ── */
+    .rtm-wrap { overflow-x: auto; }
+    .rtm-table {
+      width: 100%; border-collapse: collapse;
+      font-size: .81rem;
+    }
+    .rtm-table th {
+      padding: 10px 14px;
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap; text-align: left;
+    }
+    .rtm-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      color: var(--dim);
+      line-height: 1.5;
+    }
+    .rtm-table tr.rtm-grp-start td { border-top: 2px solid rgba(255,255,255,.08); }
+    .rtm-table td.req-cell  { color: var(--blue);   font-family: monospace; font-size: .74rem; white-space: nowrap; }
+    .rtm-table td.scn-cell  { color: var(--indigo); font-family: monospace; font-size: .74rem; white-space: nowrap; }
+    .rtm-table td.tc-cell   { color: var(--green);  font-family: monospace; font-size: .74rem; white-space: nowrap; }
+    .rtm-table td.title-cell { max-width: 220px; font-size: .82rem; }
+    .rtm-no-tc { color: var(--rose); font-size: .74rem; font-style: italic; }
+    .rtm-coverage {
+      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+      padding: 14px 18px; margin-bottom: 16px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+      font-size: .8rem;
+    }
+    .rtm-cov-item { display: flex; gap: 6px; align-items: center; }
+    .rtm-cov-val { font-weight: 800; font-size: .95rem; }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .split { grid-template-columns: 1fr; }
+      .left-panel { position: static; }
+      .empty-state { min-height: 200px; }
+    }
+    @media (max-width: 600px) {
+      .metrics { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">
+        <h1>Multi-Agent Quality Engineer</h1>
+        <span>Requirement → Scenario → Test Case → Code</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="zalopay-badge">
+        <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+          <rect width="48" height="48" rx="12" fill="#0068FF"/>
+          <text x="24" y="20" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-size="10" font-weight="400" letter-spacing="0.5">Zalo</text>
+          <text x="24" y="33" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="0.3">pay</text>
+        </svg>
+        <span>From</span> Zalopay
+      </div>
+      <div class="status-pill"><span class="dot"></span><span>Backend online</span></div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <h2>Test Pilot</h2>
+  </section>
+
+  <!-- Pipeline (horizontal) -->
+  <div class="pipeline">
+    <div class="agent-card" id="ag1">
+      <div class="agent-num" id="n1">1</div>
+      <h3>Requirement Analyzer</h3>
+      <p>Reads spec, extracts BDD scenarios</p>
+      <span class="agent-badge" id="s1">Waiting</span>
+    </div>
+    <div class="pipeline-arrow" id="arr1"></div>
+    <div class="agent-card" id="ag2">
+      <div class="agent-num" id="n2">2</div>
+      <h3>Test Case Generator</h3>
+      <p>Creates test cases &amp; payload templates</p>
+      <span class="agent-badge" id="s2">Waiting</span>
+    </div>
+    <div class="pipeline-arrow" id="arr2"></div>
+    <div class="agent-card" id="ag3">
+      <div class="agent-num" id="n3">3</div>
+      <h3>Automation Code Writer</h3>
+      <p>Writes runnable automation code files</p>
+      <span class="agent-badge" id="s3">Waiting</span>
+    </div>
+  </div>
+
+  <!-- Split layout -->
+  <div class="split">
+
+    <!-- ── LEFT: Input ── -->
+    <div class="left-panel">
+
+      <!-- Input -->
+      <div class="input-card">
+        <div class="input-top">
+          <h3>Enter requirement</h3>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="char-count" id="cc">0 chars</span>
+            <button id="clearBtn" onclick="clearData()" style="padding:3px 10px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--dim);font:inherit;font-size:.75rem;cursor:pointer;transition:all var(--t)" onmouseover="this.style.color='var(--text)';this.style.borderColor='var(--dim)'" onmouseout="this.style.color='var(--dim)';this.style.borderColor='var(--border)'">✕ Clear</button>
+          </div>
+        </div>
+        <div class="input-tabs">
+          <button class="input-tab active" id="itab-text" onclick="switchInputTab('text',this)">✎ Type</button>
+          <button class="input-tab" id="itab-file" onclick="switchInputTab('file',this)">📄 File</button>
+          <button class="input-tab" id="itab-url" onclick="switchInputTab('url',this)">🔗 URL</button>
+        </div>
+
+        <div id="ipane-text">
+          <textarea id="req"
+            placeholder="Example:&#10;POST /api/users — Register a new user account.&#10;- name: required, 2–50 characters&#10;- email: required, valid email format&#10;- password: min 8 chars, must include uppercase and digit&#10;- 201 on success, 400 if missing fields, 409 if email already exists"
+          ></textarea>
+        </div>
+
+        <div id="ipane-file" style="display:none">
+          <div class="file-drop" id="fileDrop"
+            onclick="document.getElementById('fileInput').click()"
+            ondragover="event.preventDefault();this.classList.add('drag-over')"
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="handleFileDrop(event)">
+            <input type="file" id="fileInput" accept=".txt,.md,.pdf,.docx,.yaml,.yml,.json" style="display:none" onchange="handleFileSelect(event)">
+            <span class="drop-icon">📂</span>
+            Click to upload or drag &amp; drop a file here
+            <span class="drop-hint">.txt · .md · .pdf · .docx · .yaml · .json</span>
+          </div>
+        </div>
+
+        <div id="ipane-url" style="display:none">
+          <div class="url-row">
+            <input type="url" id="urlInput" class="url-input" placeholder="https://..." onkeydown="if(event.key==='Enter')fetchUrlContent()">
+            <button class="url-fetch-btn" id="urlFetchBtn" onclick="fetchUrlContent()">Fetch</button>
+          </div>
+          <div class="url-status" id="urlStatus"></div>
+        </div>
+        <div class="fw-group">
+          <span class="fw-label">Framework:</span>
+          <div class="fw-pills">
+            <button class="fw-pill active" data-fw="pytest">pytest</button>
+            <button class="fw-pill" data-fw="playwright">playwright</button>
+            <button class="fw-pill" data-fw="k6">k6</button>
+            <button class="fw-pill" data-fw="selenium">selenium</button>
+            <button class="fw-pill" data-fw="postman">postman</button>
+          </div>
+        </div>
+        <button class="run-btn" id="runBtn" onclick="run()">
+          <span class="spinner"></span>
+          <span class="btn-icon">🔍</span>
+          <span id="runBtnText">Analyze Requirement</span>
+        </button>
+        <div class="action-row" id="actionRow">
+          <button class="cancel-btn" id="cancelBtn" onclick="cancelRun()" disabled>✕ Cancel</button>
+          <button class="retry-btn" id="retryBtn" onclick="retryRun()" style="display:none">↺ Retry</button>
+        </div>
+      </div>
+
+    </div><!-- /left-panel -->
+
+    <!-- ── RIGHT: Output ── -->
+    <div class="right-panel">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🚀</div>
+        <h3>Output will appear here</h3>
+        <p>Enter a requirement on the left and click Analyze Requirement to get started.</p>
+      </div>
+
+      <!-- Phase 1: Preview -->
+      <div class="preview-panel" id="previewPanel">
+        <div class="overview-card">
+          <h3>📋 Requirement Overview</h3>
+          <div class="overview-summary" id="ovSummary"></div>
+          <div class="overview-section" id="ovFeatures"></div>
+          <div class="overview-section" id="ovEndpoints"></div>
+          <div class="overview-section" id="ovRules"></div>
+        </div>
+
+        <div id="qsPreview"></div>
+
+        <div class="suggestions-card">
+          <h3>💡 More details required</h3>
+          <div id="sugList"></div>
+        </div>
+
+        <div class="confirm-bar">
+          <p>Looks good? Click <strong>Confirm</strong> to analyze and view scenarios.</p>
+          <button onclick="editRequirement()" style="padding:10px 18px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--dim);font:inherit;font-size:.82rem;cursor:pointer;margin-right:8px" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--dim)'">✏️ Edit Req</button>
+          <button class="confirm-btn" id="confirmBtn" onclick="confirm_()">
+            <span class="spinner" id="confirmSpinner" style="display:none;width:14px;height:14px;border-width:2px"></span>
+            <span id="confirmBtnText">✓ Confirm & Analyze Scenarios</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div class="err-box" id="errBox">
+        <span style="font-size:1.1rem;flex-shrink:0">⚠</span>
+        <span id="errMsg"></span>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics" id="metrics" style="display:none">
+        <div class="metric">
+          <div class="metric-ico blue">🎯</div>
+          <div><div class="metric-val blue" id="mv1">0</div><div class="metric-lbl">Scenarios</div></div>
+        </div>
+        <div class="metric">
+          <div class="metric-ico green">✅</div>
+          <div><div class="metric-val green" id="mv2">0</div><div class="metric-lbl">Test Cases</div></div>
+        </div>
+        <div class="metric">
+          <div class="metric-ico purple">💻</div>
+          <div><div class="metric-val purple" id="mv3">0</div><div class="metric-lbl">Code Files</div></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="results" id="results">
+        <div class="tabs-nav">
+          <button class="tab-btn" onclick="tab('overview',this)">
+            Requirement <span class="tab-count" id="tc0">0</span>
+          </button>
+          <button class="tab-btn active" onclick="tab('scenarios',this)">
+            Scenarios <span class="tab-count" id="tc1">0</span>
+          </button>
+          <button class="tab-btn" onclick="tab('testcases',this)">
+            Test Cases <span class="tab-count" id="tc2">0</span>
+          </button>
+          <button class="tab-btn" onclick="tab('rtm',this)">
+            Requirement Traceability Matrix <span class="tab-count" id="tc4">0</span>
+          </button>
+          <button class="tab-btn" onclick="tab('code',this)">
+            Code Files <span class="tab-count" id="tc3">0</span>
+          </button>
+        </div>
+        <div class="tab-panel" id="tab-overview"><div id="ov-panel"></div></div>
+        <div class="tab-panel active" id="tab-scenarios">
+          <!-- Generate TC bar (visible after Agent 1, before Agent 2) -->
+          <div class="gen-tc-bar" id="genTcBar" style="display:none">
+            <p><strong id="genTcBarCount">0</strong> scenarios ready — review, add more below, then generate test cases.</p>
+            <button class="gen-tc-btn" id="genTcBtn" onclick="triggerGenerateTC()">
+              <span class="spinner" id="genTcSpinner" style="display:none;width:13px;height:13px;border-width:2px"></span>
+              <span id="genTcBtnText">▶ Generate Test Cases</span>
+            </button>
+          </div>
+          <div id="sgrid"></div>
+          <!-- Add Scenario -->
+          <div id="addScnSection" style="display:none">
+            <button class="add-scn-toggle" onclick="toggleAddScnForm()">＋ Add Scenario</button>
+            <div class="add-scn-form-wrap" id="addScnForm" style="display:none">
+              <h4>Add Custom Scenario</h4>
+              <div class="scn-form-grid">
+                <div class="scn-field scn-form-full">
+                  <label>Title *</label>
+                  <input id="scnTitle" placeholder="e.g. User logs in with expired token">
+                </div>
+                <div class="scn-field">
+                  <label>Type</label>
+                  <select id="scnType">
+                    <option value="positive">Positive</option>
+                    <option value="negative">Negative</option>
+                    <option value="boundary">Boundary</option>
+                    <option value="security">Security</option>
+                    <option value="edge case">Edge Case</option>
+                  </select>
+                </div>
+                <div class="scn-field">
+                  <label>Priority</label>
+                  <select id="scnPriority">
+                    <option value="high">High</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div class="scn-field scn-form-full">
+                  <label>Given</label>
+                  <textarea id="scnGiven" placeholder="Given the system is available and user has an expired token..."></textarea>
+                </div>
+                <div class="scn-field scn-form-full">
+                  <label>When</label>
+                  <textarea id="scnWhen" placeholder="When the user calls POST /login with expired credentials..."></textarea>
+                </div>
+                <div class="scn-field scn-form-full">
+                  <label>Then</label>
+                  <textarea id="scnThen" placeholder="Then the system returns 401 Unauthorized with error message..."></textarea>
+                </div>
+                <div class="scn-field">
+                  <label>Related Requirement</label>
+                  <input id="scnReq" placeholder="REQ-001 (optional)">
+                </div>
+                <div class="scn-field">
+                  <label>Related Endpoint</label>
+                  <input id="scnEndpoint" placeholder="POST /api/login (optional)">
+                </div>
+              </div>
+              <div class="add-scn-actions">
+                <button class="btn-cancel-scn" onclick="toggleAddScnForm()">Cancel</button>
+                <button class="btn-add-scn" onclick="submitAddScenario()">＋ Add Scenario</button>
+              </div>
+            </div>
+          </div>
+          <div id="pager-scn"></div>
+        </div>
+        <div class="tab-panel" id="tab-testcases">
+          <div id="tc-filter-bar"></div>
+          <div id="tgrid"></div>
+          <div id="pager-tc"></div>
+        </div>
+        <div class="tab-panel" id="tab-rtm"><div id="rtm-panel"></div><div id="pager-rtm"></div></div>
+        <div class="tab-panel" id="tab-code">
+          <!-- Generate Code prompt bar -->
+          <div id="codePromptBar" style="display:none;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.2);border-radius:var(--r);margin-bottom:16px">
+            <p style="font-size:.85rem;color:var(--dim)">Ready to generate <strong style="color:var(--purple)">automation code</strong> from the test cases above?</p>
+            <button id="genCodeBtn" onclick="runAgent3()" style="display:flex;align-items:center;gap:8px;flex-shrink:0;padding:10px 24px;border-radius:999px;border:none;background:linear-gradient(135deg,var(--purple),var(--indigo));color:#fff;font:inherit;font-size:.88rem;font-weight:700;cursor:pointer;transition:all var(--t);box-shadow:0 4px 18px rgba(167,139,250,.25)">
+              <span class="spinner" id="codeSpinner" style="display:none;width:13px;height:13px;border-width:2px"></span>
+              <span id="genCodeBtnText">▶ Generate Code</span>
+            </button>
+          </div>
+          <div id="cgrid"></div>
+          <div id="pager-code"></div>
+        </div>
+      </div>
+
+    </div><!-- /right-panel -->
+  </div><!-- /split -->
+
+</div>
+<script>
+let fw = localStorage.getItem('qa_framework') || 'pytest';
+let _currentReqSummary = [];
+let _currentPayloadTemplates = [];
+let _currentTestDataMatrix = [];
+
+// Restore saved framework pill
+document.querySelectorAll('.fw-pill').forEach(b => {
+  if (b.dataset.fw === fw) { b.classList.add('active'); } else { b.classList.remove('active'); }
+  b.onclick = () => {
+    document.querySelectorAll('.fw-pill').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    fw = b.dataset.fw;
+    localStorage.setItem('qa_framework', fw);
+  };
+});
+
+const _MAX_REQ_CHARS = 8000;
+document.getElementById('req').addEventListener('input', function() {
+  const len = this.value.length;
+  const cc = document.getElementById('cc');
+  cc.textContent = `${len} / ${_MAX_REQ_CHARS} chars`;
+  const runBtn = document.getElementById('runBtn');
+  if (len > _MAX_REQ_CHARS) {
+    cc.style.color = 'var(--rose)';
+    runBtn.disabled = true;
+    runBtn.title = `Requirement too long (max ${_MAX_REQ_CHARS} chars)`;
+  } else if (len > _MAX_REQ_CHARS * 0.85) {
+    cc.style.color = 'var(--amber)';
+    runBtn.disabled = false;
+    runBtn.title = '';
+  } else {
+    cc.style.color = 'var(--muted)';
+    runBtn.disabled = false;
+    runBtn.title = '';
+  }
+});
+
+function agent(n, state, text) {
+  const card = document.getElementById('ag'+n);
+  const num  = document.getElementById('n'+n);
+  const stat = document.getElementById('s'+n);
+  card.className = 'agent-card' + (state ? ' '+state : '');
+  stat.textContent = text;
+  num.textContent = state === 'done' ? '✓' : state === 'error' ? '✕' : n;
+  const arr = document.getElementById('arr'+n);
+  if (arr) arr.className = 'pipeline-arrow' + (state === 'done' ? ' done' : state === 'processing' ? ' active' : '');
+}
+
+function resetAgents() {
+  [1,2,3].forEach(n => agent(n,'','Waiting'));
+}
+
+function countUp(el, to, ms=700) {
+  const t0 = performance.now();
+  const tick = t => {
+    const p = Math.min((t-t0)/ms, 1);
+    el.textContent = Math.round(p * to);
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function tab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function e(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const TYPE_CLASS = {positive:'positive',negative:'negative',boundary:'boundary',security:'security',performance:'performance','edge case':'edge-case'};
+const PRI_CLASS  = {high:'high',medium:'medium',low:'low'};
+function bdg(txt, cls) { return `<span class="bdg ${cls}">${e(txt)}</span>`; }
+
+function renderScenarios(list) {
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  _pageSCN = Math.max(1, Math.min(_pageSCN, totalPages));
+  const page = list.slice((_pageSCN - 1) * PAGE_SIZE, _pageSCN * PAGE_SIZE);
+  document.getElementById('sgrid').innerHTML = page.map((s, i) => {
+    const isManual = _manualScenarioIds.has(s.scenario_id);
+    const sid = e(s.scenario_id);
+    const typeOpts = ['positive','negative','boundary','security','edge case'].map(t =>
+      `<option value="${t}"${s.type===t?' selected':''}>${t}</option>`).join('');
+    const priOpts = ['high','medium','low'].map(p =>
+      `<option value="${p}"${s.priority===p?' selected':''}>${p}</option>`).join('');
+    return `
+    <div class="s-card${isManual?' manual':''}" id="scard-${sid}" style="--i:${i}">
+      <div class="s-head">
+        <div style="flex:1;min-width:0">
+          <h4>${e(s.title)}${isManual?'<span class="s-manual-tag">manual</span>':''}</h4>
+          ${s.description ? `<div style="font-size:.78rem;color:var(--muted);margin:2px 0 4px;line-height:1.4">${e(s.description)}</div>` : ''}
+          <span class="s-id">${e(s.scenario_id)}${s.related_requirement?' · '+e(s.related_requirement):''}</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;flex-shrink:0">
+          <div class="badges">
+            ${bdg(s.type, TYPE_CLASS[s.type]||'positive')}
+            ${bdg(s.priority, PRI_CLASS[s.priority]||'medium')}
+            ${s.related_endpoint ? bdg(e(s.related_endpoint),'ep') : ''}
+          </div>
+          <button class="s-edit-btn" onclick="toggleScenarioEdit('${sid}')" title="Edit">✏ Edit</button>
+          ${isManual ? `<button class="s-del-btn" onclick="deleteScenario('${sid}')" title="Remove">✕</button>` : ''}
+        </div>
+      </div>
+      <div class="bdd" id="sbdd-${sid}">
+        <div class="bdd-row"><span class="kw g">Given</span><span class="bdd-txt">${e(s.given)}</span></div>
+        <div class="bdd-row"><span class="kw w">When</span><span class="bdd-txt">${e(s.when)}</span></div>
+        <div class="bdd-row"><span class="kw t">Then</span><span class="bdd-txt">${e(s.then)}</span></div>
+      </div>
+      <div class="s-edit-form" id="sedit-${sid}" style="display:none">
+        <div class="s-edit-row"><span class="s-edit-label">Title</span><input class="s-edit-input" id="sedit-title-${sid}" value="${e(s.title)}"></div>
+        <div class="s-edit-row"><span class="s-edit-label">Given</span><textarea class="s-edit-textarea" id="sedit-given-${sid}">${e(s.given)}</textarea></div>
+        <div class="s-edit-row"><span class="s-edit-label">When</span><textarea class="s-edit-textarea" id="sedit-when-${sid}">${e(s.when)}</textarea></div>
+        <div class="s-edit-row"><span class="s-edit-label">Then</span><textarea class="s-edit-textarea" id="sedit-then-${sid}">${e(s.then)}</textarea></div>
+        <div class="s-edit-row"><span class="s-edit-label">Type</span><select class="s-edit-select" id="sedit-type-${sid}">${typeOpts}</select></div>
+        <div class="s-edit-row"><span class="s-edit-label">Priority</span><select class="s-edit-select" id="sedit-pri-${sid}">${priOpts}</select></div>
+        <div class="s-edit-actions">
+          <button class="s-cancel-edit-btn" onclick="toggleScenarioEdit('${sid}')">Cancel</button>
+          <button class="s-save-btn" onclick="saveScenarioEdit('${sid}')">Save</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('pager-scn').innerHTML = _pager(_pageSCN, totalPages, 'scn');
+}
+
+const TECHNIQUE_COLOR = {
+  EP:'#38bdf8', BVA:'#818cf8', DT:'#a78bfa', ST:'#f472b6',
+  UC:'#34d399', PT:'#fbbf24', EG:'#f87171',
+  FA:'#2dd4bf', RT:'#fb923c', CT:'#a3e635', HD:'#e879f9',
+  BF:'#60a5fa', OV:'#4ade80', BP:'#facc15', RG:'#94a3b8',
+};
+
+const TECHNIQUE_NAMES = {
+  EP:  'Equivalence Partitioning (EP)',
+  BVA: 'Boundary Value Analysis (BVA)',
+  DT:  'Decision Table (DT)',
+  ST:  'State Transition (ST)',
+  UC:  'Use Case Testing (UC)',
+  PT:  'Pairwise Testing (PT)',
+  EG:  'Error Guessing (EG)',
+  FA:  'Functional Accuracy (FA)',
+  RT:  'Robustness Testing (RT)',
+  CT:  'Consistency Testing (CT)',
+  HD:  'Hallucination Detection (HD)',
+  BF:  'Bias & Fairness Testing (BF)',
+  OV:  'Output Validation (OV)',
+  BP:  'Boundary Probing (BP)',
+  RG:  'Regression Testing (RG)',
+};
+
+function techName(t) { return TECHNIQUE_NAMES[t] || t; }
+
+function techBadge(t) {
+  if (!t) return '';
+  const c = TECHNIQUE_COLOR[t] || '#94a3b8';
+  return `<span style="padding:2px 8px;border-radius:4px;font-size:.7rem;font-weight:700;font-family:monospace;background:${c}22;color:${c};border:1px solid ${c}44">${e(t)}</span>`;
+}
+
+function renderTechniques(techniques, systemType) {
+  const typeColors = {traditional:'var(--blue)', ai:'var(--purple)', hybrid:'var(--amber)'};
+  const typeColor = typeColors[systemType] || 'var(--dim)';
+  const header = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <span style="font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">System Type</span>
+    <span style="padding:3px 12px;border-radius:999px;font-size:.76rem;font-weight:700;background:${typeColor}18;color:${typeColor};border:1px solid ${typeColor}33">${e((systemType||'traditional').toUpperCase())}</span>
+  </div>`;
+  const cards = (techniques||[]).map(t => {
+    const c = TECHNIQUE_COLOR[t.technique] || '#94a3b8';
+    const scns = (t.applicable_scenarios||[]).slice(0,6);
+    const scnBadges = scns.map(id=>`<span style="font-size:.68rem;padding:1px 6px;border-radius:4px;background:${c}15;color:${c};border:1px solid ${c}30">${e(id)}</span>`).join('');
+    return `<div style="display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:start;padding:10px 0;border-bottom:1px solid var(--border)">
+      <span style="padding:3px 10px;border-radius:5px;font-size:.7rem;font-weight:700;text-align:center;background:${c}22;color:${c};border:1px solid ${c}44;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e(techName(t.technique))}</span>
+      <div>
+        <div style="font-size:.78rem;color:var(--dim);line-height:1.5">${e(t.rationale)}</div>
+        ${scnBadges ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${scnBadges}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return header + (techniques.length ? cards : '<div style="font-size:.83rem;color:var(--muted)">No techniques data</div>');
+}
+
+function _renderTCFilterBar(techniques) {
+  const bar = document.getElementById('tc-filter-bar');
+  if (!bar) return;
+  const techs = [...new Set((techniques||[]).map(t=>t.technique).filter(Boolean))];
+  const techPills = ['', ...techs].map(t => {
+    const label = t ? t : 'All';
+    const active = _tcFilter.tech === t ? ' active' : '';
+    return `<button class="tc-pill${active}" onclick="_setTCFilter('tech','${t}')">${e(label)}</button>`;
+  }).join('');
+  const priPills = [['','All'],['high','High'],['medium','Medium'],['low','Low']].map(([v,l]) => {
+    const active = _tcFilter.priority === v ? ' active' : '';
+    return `<button class="tc-pill${active}" onclick="_setTCFilter('priority','${v}')">${l}</button>`;
+  }).join('');
+  bar.className = 'tc-filter-bar';
+  bar.innerHTML = `<input class="tc-search" id="tc-search" type="text" placeholder="🔍 Search ID or name…" value="${e(_tcFilter.text)}" oninput="_setTCFilter('text',this.value)">
+    <span class="tc-filter-label">Technique</span>
+    <div class="tc-filter-pills">${techPills}</div>
+    <span class="tc-filter-label">Priority</span>
+    <div class="tc-filter-pills">${priPills}</div>`;
+}
+function _setTCFilter(key, val) {
+  _tcFilter[key] = val;
+  _pageTC = 1;
+  renderTestCases(_currentTestCases, _currentTechniques, _currentSystemType);
+}
+
+function renderTestCases(list, techniques, systemType) {
+  const tgrid = document.getElementById('tgrid');
+
+  // Filter bar (always re-render to reflect active state)
+  _renderTCFilterBar(techniques);
+
+  // Apply filters
+  let filtered = list;
+  if (_tcFilter.text) {
+    const q = _tcFilter.text.toLowerCase();
+    filtered = filtered.filter(tc =>
+      (tc.test_case_id||'').toLowerCase().includes(q) ||
+      (tc.name||'').toLowerCase().includes(q)
+    );
+  }
+  if (_tcFilter.tech)     filtered = filtered.filter(tc => (tc.technique || 'UC') === _tcFilter.tech);
+  if (_tcFilter.priority) filtered = filtered.filter(tc => tc.priority  === _tcFilter.priority);
+
+  // Techniques summary header
+  const techHtml = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:16px">
+    <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:14px">🧪 Techniques Applied</div>
+    ${renderTechniques(techniques, systemType)}
+  </div>`;
+
+  const totalPagesTC = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  _pageTC = Math.max(1, Math.min(_pageTC, totalPagesTC));
+  const pageTC = filtered.slice((_pageTC - 1) * PAGE_SIZE, _pageTC * PAGE_SIZE);
+
+  const tcHtml = pageTC.map((tc,i) => `
+    <div class="tc" id="tcase${i}">
+      <div class="tc-head" onclick="toggle(${i})">
+        <div class="tc-left">
+          <span class="tc-cid">${e(tc.test_case_id)}</span>
+          <span class="tc-name">${e(tc.name)}</span>
+        </div>
+        <div class="badges">
+          ${techBadge(tc.technique || 'UC')}
+          ${bdg(tc.priority || 'medium', PRI_CLASS[tc.priority]||'medium')}
+          ${(() => { const tag = (tc.tags||[])[0] || 'positive'; return `<span class="tag">${e(tag)}</span>`; })()}
+          <span class="chev">▼</span>
+        </div>
+      </div>
+      <div class="tc-body">
+        ${tc.scenario_id ? `<div class="sect"><div class="sect-lbl">Linked Scenario</div><span style="font-size:.78rem;font-family:monospace;color:var(--indigo)">${e(tc.scenario_id)}</span></div>` : ''}
+        <div class="sect">
+          <div class="sect-lbl">Preconditions</div>
+          <div style="font-size:.85rem;color:var(--dim)">${e(tc.preconditions)}</div>
+        </div>
+        <div class="sect">
+          <div class="sect-lbl">Steps</div>
+          <ul class="steps">${(tc.steps||[]).map(s=>`<li>${e(s)}</li>`).join('')}</ul>
+        </div>
+        <div class="sect">
+          <div class="sect-lbl">Expected Result</div>
+          <div class="expected">${e(tc.expected_result)}</div>
+        </div>
+        ${tc.test_data ? `<div class="sect"><div class="sect-lbl">Test Data</div><div class="data-block">${e(JSON.stringify(tc.test_data,null,2))}</div></div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  const noResultsHtml = filtered.length === 0 && list.length > 0
+    ? `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:.85rem">No test cases match the current filter.</div>` : '';
+  tgrid.innerHTML = techHtml + noResultsHtml + tcHtml;
+  document.getElementById('pager-tc').innerHTML = _pager(_pageTC, totalPagesTC, 'tc');
+}
+
+function toggle(i) { document.getElementById('tcase'+i).classList.toggle('open'); }
+
+function renderCode(files, framework) {
+  _currentFiles = files;
+  _currentFramework = framework;
+  if (!files.length) {
+    document.getElementById('cgrid').innerHTML = `<div class="code-empty">
+      <div class="code-empty-icon">📄</div>
+      <p>No code generated yet.<br>Click <strong>Generate Code</strong> above to start.</p>
+    </div>`;
+    document.getElementById('pager-code').innerHTML = '';
+    return;
+  }
+  const lang = {pytest:'python',playwright:'python',k6:'javascript',selenium:'python',postman:'json'}[framework] || 'python';
+  const totalPagesCode = Math.max(1, Math.ceil(files.length / PAGE_SIZE));
+  _pageCode = Math.max(1, Math.min(_pageCode, totalPagesCode));
+  const pageFiles = files.slice((_pageCode - 1) * PAGE_SIZE, _pageCode * PAGE_SIZE);
+  document.getElementById('cgrid').innerHTML = pageFiles.map((f, i) => {
+    const lines = (f.code || '').split('\n').length;
+    return `
+    <div class="code-file" id="cfile${i}">
+      <div class="code-head" onclick="toggleCode(${i})">
+        <div class="code-meta">
+          <span class="lang-badge">${lang}</span>
+          <span class="fname">${e(f.file_name)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="code-lines">${lines} lines</span>
+          <button class="copy-btn" id="cpbtn${i}" onclick="event.stopPropagation();copyCode(${i})">⎘ Copy</button>
+          <span class="chev">▼</span>
+        </div>
+      </div>
+      <div class="code-body">
+        ${f.explanation ? `<div class="explanation">${e(f.explanation)}</div>` : ''}
+        <pre><code class="language-${lang}" id="code${i}">${e(f.code)}</code></pre>
+      </div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('#cgrid pre code').forEach(b => hljs.highlightElement(b));
+  document.getElementById('pager-code').innerHTML = _pager(_pageCode, totalPagesCode, 'code');
+}
+
+function toggleCode(i) { document.getElementById('cfile'+i).classList.toggle('open'); }
+
+function copyCode(i) {
+  const code = document.getElementById('code'+i).textContent;
+  const btn  = document.getElementById('cpbtn'+i);
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('ok');
+    setTimeout(() => { btn.innerHTML = '⎘ Copy'; btn.classList.remove('ok'); }, 2000);
+  }).catch(() => {
+    btn.textContent = '✗ Failed';
+    setTimeout(() => { btn.innerHTML = '⎘ Copy'; }, 2000);
+  });
+}
+
+function renderOverviewTab(overview, suggestions, reqText, reqSummary, qualityScore, missingInfo) {
+  const ov = overview || {};
+  // ── Extracted Requirements (REQ IDs) with pagination ──
+  const _reqList = reqSummary || [];
+  const _totalPagesREQ = Math.max(1, Math.ceil(_reqList.length / PAGE_SIZE));
+  _pageREQ = Math.max(1, Math.min(_pageREQ, _totalPagesREQ));
+  const _reqPage = _reqList.slice((_pageREQ - 1) * PAGE_SIZE, _pageREQ * PAGE_SIZE);
+  const reqSummaryHtml = _reqList.length ? `
+    <div style="background:var(--surface);border:1px solid rgba(56,189,248,.2);border-radius:var(--r);padding:20px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <span style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue)">🔖 Extracted Requirements</span>
+        <span style="font-size:.76rem;color:var(--muted)">${_reqList.length} items</span>
+      </div>
+      <div style="display:grid;gap:8px">
+        ${_reqPage.map(r => `
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:var(--bg2);border-radius:10px;border-left:3px solid var(--blue)">
+            <span style="font-family:monospace;font-size:.78rem;font-weight:700;color:var(--blue);white-space:nowrap;margin-top:1px">${e(r.id)}</span>
+            <span style="font-size:.84rem;color:var(--dim);line-height:1.5">${e(r.text)}</span>
+          </div>`).join('')}
+      </div>
+      ${_pager(_pageREQ, _totalPagesREQ, 'req')}
+    </div>` : '';
+
+  // ── Overview card ──
+  const featuresHtml = (ov.features||[]).length ? `
+    <div class="overview-section">
+      <div class="ov-label">Features</div>
+      <div class="ov-tags">${(ov.features||[]).map(f=>`<span class="ov-tag">${e(f)}</span>`).join('')}</div>
+    </div>` : '';
+
+  const endpointsHtml = (ov.endpoints||[]).length ? `
+    <div class="overview-section">
+      <div class="ov-label" style="margin-top:12px">Endpoints</div>
+      <div class="ov-tags">${(ov.endpoints||[]).map(ep=>`<span class="ov-tag endpoint">${e(ep)}</span>`).join('')}</div>
+    </div>` : '';
+
+  const rulesHtml = (ov.business_rules||[]).length ? `
+    <div class="overview-section">
+      <div class="ov-label" style="margin-top:12px">Business Rules</div>
+      <ul style="list-style:none;display:grid;gap:5px;margin-top:4px">
+        ${(ov.business_rules||[]).map(r=>`<li style="font-size:.83rem;color:var(--dim);padding:6px 10px;background:var(--bg2);border-radius:7px;border-left:2px solid rgba(255,255,255,.1)">• ${e(r)}</li>`).join('')}
+      </ul>
+    </div>` : '';
+
+  const overviewCard = `
+    <div class="overview-card" style="margin-bottom:16px">
+      <h3>📋 Requirement Overview</h3>
+      ${ov.summary ? `<div class="overview-summary">${e(ov.summary)}</div>` : ''}
+      ${featuresHtml}${endpointsHtml}${rulesHtml}
+    </div>`;
+
+  document.getElementById('ov-panel').innerHTML = overviewCard + reqSummaryHtml;
+}
+
+function renderRTM(scenarios, testCases, reqSummary) {
+  // Build req lookup: id → text
+  const reqMap = {};
+  for (const r of (reqSummary || [])) {
+    if (r.id) reqMap[r.id] = r.text || '';
+  }
+
+  // Build TC lookup: scenario_id → [tcs]
+  const scToTC = {};
+  for (const tc of testCases) {
+    const sid = tc.scenario_id || '';
+    if (!scToTC[sid]) scToTC[sid] = [];
+    scToTC[sid].push(tc);
+  }
+
+  const covered = scenarios.filter(s => (scToTC[s.scenario_id] || []).length > 0).length;
+  const pct = scenarios.length ? Math.round(covered / scenarios.length * 100) : 0;
+  const pctColor = pct === 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--rose)';
+
+  const covHtml = `<div style="display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-bottom:14px">
+    <span style="font-size:.8rem;color:var(--muted)">Scenario Coverage</span>
+    <span style="font-size:.88rem;font-weight:700;color:${pctColor}">${covered}/${scenarios.length}</span>
+    <button onclick="exportRTM()" style="display:flex;align-items:center;gap:7px;padding:7px 16px;border-radius:999px;border:1px solid rgba(52,211,153,.3);background:rgba(52,211,153,.07);color:var(--green);font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;transition:all var(--t)" onmouseover="this.style.background='rgba(52,211,153,.15)'" onmouseout="this.style.background='rgba(52,211,153,.07)'">⬇ Export Excel</button>
+  </div>`;
+
+  const totalPagesRTM = Math.max(1, Math.ceil(scenarios.length / PAGE_SIZE));
+  _pageRTM = Math.max(1, Math.min(_pageRTM, totalPagesRTM));
+  const pageScns = scenarios.slice((_pageRTM - 1) * PAGE_SIZE, _pageRTM * PAGE_SIZE);
+
+  let rows = '';
+  for (const sc of pageScns) {
+    const tcs = scToTC[sc.scenario_id] || [];
+    const reqId = sc.related_requirement || '';
+    const reqText = reqMap[reqId] || '';
+    const span = Math.max(tcs.length, 1);
+
+    if (tcs.length === 0) {
+      rows += `<tr class="rtm-grp-start">
+        <td class="req-cell">${e(reqId) || '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="title-cell" style="font-size:.78rem">${e(reqText) || '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="scn-cell">${e(sc.scenario_id)}</td>
+        <td class="title-cell">${e(sc.title)}</td>
+        <td>${bdg(sc.type, TYPE_CLASS[sc.type]||'positive')}</td>
+        <td>${bdg(sc.priority, PRI_CLASS[sc.priority]||'medium')}</td>
+        <td colspan="3"><span class="rtm-no-tc">No test case linked</span></td>
+      </tr>`;
+    } else {
+      for (let i = 0; i < tcs.length; i++) {
+        const tc = tcs[i];
+        rows += `<tr${i === 0 ? ' class="rtm-grp-start"' : ''}>
+          ${i === 0 ? `
+            <td class="req-cell" rowspan="${span}">${e(reqId) || '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="title-cell" rowspan="${span}" style="font-size:.78rem">${e(reqText) || '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="scn-cell" rowspan="${span}">${e(sc.scenario_id)}</td>
+            <td class="title-cell" rowspan="${span}">${e(sc.title)}</td>
+            <td rowspan="${span}">${bdg(sc.type, TYPE_CLASS[sc.type]||'positive')}</td>
+            <td rowspan="${span}">${bdg(sc.priority, PRI_CLASS[sc.priority]||'medium')}</td>
+          ` : ''}
+          <td class="tc-cell">${e(tc.test_case_id)}</td>
+          <td class="title-cell">${e(tc.name)}</td>
+          <td>${techBadge(tc.technique)}</td>
+        </tr>`;
+      }
+    }
+  }
+
+  document.getElementById('pager-rtm').innerHTML = _pager(_pageRTM, totalPagesRTM, 'rtm');
+  document.getElementById('rtm-panel').innerHTML = covHtml + `<div class="rtm-wrap">
+    <table class="rtm-table">
+      <thead>
+        <tr>
+          <th>REQ ID</th>
+          <th>Requirement</th>
+          <th>SCN ID</th>
+          <th>Scenario</th>
+          <th>Type</th>
+          <th>Priority</th>
+          <th>TC ID</th>
+          <th>Test Case</th>
+          <th>Technique</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function exportRTM() {
+  if (!window.XLSX) { alert('Excel library not loaded — please refresh the page.'); return; }
+  const reqMap = {};
+  (_currentReqSummary || []).forEach(r => { reqMap[r.id] = r.text || ''; });
+
+  const tcByScn = {};
+  (_currentTestCases || []).forEach(tc => {
+    const sid = tc.scenario_id || '';
+    if (!tcByScn[sid]) tcByScn[sid] = [];
+    tcByScn[sid].push(tc);
+  });
+
+  const header = ['REQ ID', 'Requirement', 'SCN ID', 'Scenario', 'Type', 'Priority', 'TC ID', 'Test Case', 'Technique', 'Expected Result'];
+  const rows = [header];
+
+  (_currentScenarios || []).forEach(scn => {
+    const reqId = scn.related_requirement || '';
+    const reqText = reqMap[reqId] || '';
+    const tcs = tcByScn[scn.scenario_id] || [];
+    if (tcs.length === 0) {
+      rows.push([reqId, reqText, scn.scenario_id, scn.title || '', scn.type || '', scn.priority || '', '', '', '', '']);
+    } else {
+      tcs.forEach(tc => {
+        rows.push([reqId, reqText, scn.scenario_id, scn.title || '', scn.type || '', scn.priority || '', tc.test_case_id || '', tc.name || '', tc.technique || '', tc.expected_result || '']);
+      });
+    }
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    {wch: 10}, {wch: 40}, {wch: 10}, {wch: 35}, {wch: 12}, {wch: 10},
+    {wch: 12}, {wch: 35}, {wch: 12}, {wch: 40}
+  ];
+
+  // Style header row bold
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = ws[XLSX.utils.encode_cell({r: 0, c})];
+    if (cell) { cell.s = { font: { bold: true } }; }
+  }
+
+  try {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'RTM');
+    XLSX.writeFile(wb, 'requirement_traceability_matrix.xlsx');
+  } catch(err) {
+    showErr('Export RTM failed: ' + err.message);
+  }
+}
+
+function exportTestCases() {
+  if (!window.XLSX) { alert('Excel library not loaded — please refresh the page.'); return; }
+  if (!(_currentTestCases || []).length) { alert('No test cases to export.'); return; }
+  const header = ['TC ID', 'Name', 'Scenario ID', 'Technique', 'Priority', 'Preconditions', 'Steps', 'Test Data', 'Expected Result', 'Tags'];
+  const rows = [header];
+  (_currentTestCases || []).forEach(tc => {
+    rows.push([
+      tc.test_case_id || '',
+      tc.name || '',
+      tc.scenario_id || '',
+      tc.technique || '',
+      tc.priority || '',
+      tc.preconditions || '',
+      (tc.steps || []).join(' → '),
+      JSON.stringify(tc.test_data || {}),
+      tc.expected_result || '',
+      (tc.tags || []).join(', '),
+    ]);
+  });
+  try {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:10},{wch:30},{wch:10},{wch:10},{wch:8},{wch:25},{wch:50},{wch:30},{wch:35},{wch:20}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Test Cases');
+    XLSX.writeFile(wb, 'test_cases.xlsx');
+  } catch(err) {
+    showErr('Export Test Cases failed: ' + err.message);
+  }
+}
+
+async function apiError(label, res) {
+  let detail = res.statusText;
+  try { const j = await res.json(); detail = j.detail || j.message || detail; } catch {}
+  return `${label} (${res.status}): ${detail}`;
+}
+
+function showErr(msg) {
+  const b = document.getElementById('errBox');
+  document.getElementById('errMsg').textContent = msg;
+  b.classList.add('show');
+}
+function hideErr() { document.getElementById('errBox').classList.remove('show'); }
+
+// ── Render preview (Phase 1) ──
+function renderPreview(data) {
+  const ov = data.overview || {};
+  document.getElementById('ovSummary').textContent = ov.summary || '';
+
+  const features = (ov.features || []);
+  document.getElementById('ovFeatures').innerHTML = features.length ? `
+    <div class="ov-label">Features</div>
+    <div class="ov-tags">${features.map(f=>`<span class="ov-tag">${e(f)}</span>`).join('')}</div>
+  ` : '';
+
+  const endpoints = (ov.endpoints || []);
+  document.getElementById('ovEndpoints').innerHTML = endpoints.length ? `
+    <div class="ov-label" style="margin-top:12px">Endpoints</div>
+    <div class="ov-tags">${endpoints.map(ep=>`<span class="ov-tag endpoint">${e(ep)}</span>`).join('')}</div>
+  ` : '';
+
+  const rules = (ov.business_rules || []);
+  document.getElementById('ovRules').innerHTML = rules.length ? `
+    <div class="ov-label" style="margin-top:12px">Business Rules</div>
+    <ul style="list-style:none;display:grid;gap:5px;margin-top:4px">
+      ${rules.map(r=>`<li style="font-size:.83rem;color:var(--dim);padding:6px 10px;background:var(--bg2);border-radius:7px;border-left:2px solid rgba(255,255,255,.1)">• ${e(r)}</li>`).join('')}
+    </ul>
+  ` : '';
+
+  const sugs = data.suggestions || [];
+  const ICONS = {missing:'⚠️', improvement:'💡', ambiguity:'❓'};
+  document.getElementById('sugList').innerHTML = sugs.length === 0
+    ? `<div class="no-suggestions">✅ No issues found — requirement looks complete!</div>`
+    : sugs.map(s => `
+      <div class="suggestion-item">
+        <div class="sug-icon ${s.type}">${ICONS[s.type]||'💬'}</div>
+        <div class="sug-body">
+          <div class="sug-title">
+            <span class="sug-type-badge ${s.type}">${e(s.type)}</span>${e(s.title)}
+          </div>
+          <div class="sug-desc">${e(s.description)}</div>
+        </div>
+      </div>
+    `).join('');
+
+  const qs = data.quality_score || null;
+  const qsEl = document.getElementById('qsPreview');
+  if (qs) {
+    const risk = (qs.risk || 'Medium').toLowerCase();
+    const scoreColor = qs.overall >= 80 ? 'var(--green)' : qs.overall >= 60 ? 'var(--amber)' : 'var(--rose)';
+    const bd = qs.score_breakdown || {};
+    const dims = [
+      { label: 'Completeness', val: qs.completeness, color: 'var(--blue)',
+        found: bd.completeness_found||[], missing: bd.completeness_missing||[], deductions:[] },
+      { label: 'Testability',  val: qs.testability,  color: 'var(--green)',
+        found: bd.testability_found||[], missing: bd.testability_missing||[], deductions:[] },
+      { label: 'Clarity',      val: qs.ambiguity,    color: 'var(--indigo)',
+        found: bd.clarity_found||[], missing: bd.clarity_missing||[], deductions: bd.ambiguity_deductions||[] },
+    ];
+    const dimsHtml = dims.map(m => {
+      const evItems = [
+        ...(m.found).map(f=>`<li class="ev-found">✓ ${e(f)}</li>`),
+        ...(m.missing).map(f=>`<li class="ev-missing">✗ ${e(f)}</li>`),
+        ...(m.deductions).map(d=>`<li class="ev-deduction">− ${e(d)}</li>`),
+      ];
+      return `<div class="qs-dim">
+        <div class="qs-row">
+          <div class="qs-row-label">${m.label}</div>
+          <div class="qs-bar-wrap"><div class="qs-bar" style="width:${m.val}%;background:${m.color}"></div></div>
+          <div class="qs-row-val" style="color:${m.color}">${m.val}%</div>
+        </div>
+      </div>`;
+    }).join('');
+    const formula = `${qs.completeness}×0.40 + ${qs.testability}×0.35 + ${qs.ambiguity}×0.25 = ${qs.overall}`;
+    qsEl.innerHTML = `
+      <div class="qs-card">
+        <h3>🎯 Requirement Quality Score</h3>
+        <div class="qs-overall">
+          <div>
+            <div class="qs-overall-score" style="color:${scoreColor}">${qs.overall}<span style="font-size:1.1rem;font-weight:500;color:var(--muted)">/100</span></div>
+            <div class="qs-overall-label">Overall Score</div>
+          </div>
+          <div class="qs-risk-badge ${risk}">Risk: ${qs.risk}</div>
+        </div>
+        <div class="qs-metrics">${dimsHtml}</div>
+        <div class="qs-formula">overall = ${formula}</div>
+      </div>`;
+  } else {
+    qsEl.innerHTML = '';
+  }
+}
+
+// ── Phase 1: Analyze requirement → show preview ──
+let _currentText = '';
+let _currentOverview = null;
+let _currentSuggestions = [];
+let _currentQualityScore = null;
+let _currentTestCases = [];
+let _currentScenarios = [];
+let _currentMissingInfo = [];
+let _currentTechniques = [];
+let _currentSystemType = 'traditional';
+let _currentFiles = [];
+let _currentFramework = 'pytest';
+
+const PAGE_SIZE = 10;
+let _pageSCN = 1, _pageTC = 1, _pageCode = 1, _pageRTM = 1, _pageREQ = 1;
+let _tcFilter = {text: '', tech: '', priority: ''};
+
+function showSkeleton(gridId, count) {
+  const cards = Array.from({length: count}, (_, i) => {
+    const widths = [[55,80,40],[40,65,55],[70,45,60]][i % 3];
+    return `<div class="skel-card">
+      <div class="skel-line" style="width:${widths[0]}%"></div>
+      <div class="skel-line" style="width:${widths[1]}%;margin-top:14px"></div>
+      <div class="skel-line" style="width:${widths[2]}%"></div>
+    </div>`;
+  }).join('');
+  document.getElementById(gridId).innerHTML = cards;
+}
+
+function _pager(current, total, type) {
+  if (total <= 1) return '';
+  const start = Math.max(1, Math.min(current - 2, total - 4));
+  const end = Math.min(total, start + 4);
+  const nums = [];
+  for (let p = start; p <= end; p++) nums.push(p);
+  return `<div class="pager">
+    <button class="pager-btn" onclick="goPage('${type}',${current-1})" ${current===1?'disabled':''}>‹ Prev</button>
+    ${nums.map(p=>`<button class="pager-btn${p===current?' active':''}" onclick="goPage('${type}',${p})">${p}</button>`).join('')}
+    <button class="pager-btn" onclick="goPage('${type}',${current+1})" ${current===total?'disabled':''}>Next ›</button>
+    <span class="pager-info">Page ${current} / ${total}</span>
+  </div>`;
+}
+
+function goPage(type, page) {
+  if (type === 'scn')  { _pageSCN  = page; renderScenarios(_currentScenarios); }
+  if (type === 'tc')   { _pageTC   = page; renderTestCases(_currentTestCases, _currentTechniques, _currentSystemType); }
+  if (type === 'code') { _pageCode = page; renderCode(_currentFiles, _currentFramework); }
+  if (type === 'rtm')  { _pageRTM  = page; renderRTM(_currentScenarios, _currentTestCases, _currentReqSummary); }
+  if (type === 'req')  { _pageREQ  = page; renderOverviewTab(_currentOverview, _currentSuggestions, _currentText, _currentReqSummary, _currentQualityScore, _currentMissingInfo); }
+}
+let _abortController = null;
+let _lastRunText = '';
+
+function cancelRun() {
+  if (_abortController) {
+    _abortController.abort();
+    _abortController = null;
+  }
+  document.getElementById('cancelBtn').disabled = true;
+}
+
+// ── Manual scenarios ──
+let _manualScenarioCount = 0;
+let _manualScenarioIds = new Set();
+
+function _manualCacheKey() {
+  try { return 'qa_manual_scn_' + btoa(encodeURIComponent(_currentText || '')).slice(0,20); }
+  catch(e) { return 'qa_manual_scn_default'; }
+}
+
+function _saveManualScenarios() {
+  const manuals = _currentScenarios.filter(s => _manualScenarioIds.has(s.scenario_id));
+  try { localStorage.setItem(_manualCacheKey(), JSON.stringify(manuals)); } catch(e) {}
+}
+
+function _loadManualScenarios() {
+  try {
+    const saved = localStorage.getItem(_manualCacheKey());
+    if (!saved) return;
+    const manuals = JSON.parse(saved);
+    for (const s of manuals) {
+      if (!_currentScenarios.find(x => x.scenario_id === s.scenario_id)) {
+        _manualScenarioIds.add(s.scenario_id);
+        _currentScenarios.push(s);
+        const n = parseInt(s.scenario_id.replace('SCN-M','')) || 0;
+        if (n > _manualScenarioCount) _manualScenarioCount = n;
+      }
+    }
+  } catch(e) {}
+}
+
+function toggleAddScnForm() {
+  const form = document.getElementById('addScnForm');
+  const open = form.style.display !== 'none';
+  form.style.display = open ? 'none' : 'block';
+  if (!open) document.getElementById('scnTitle').focus();
+}
+
+function submitAddScenario() {
+  const title = document.getElementById('scnTitle').value.trim();
+  if (!title) { document.getElementById('scnTitle').focus(); return; }
+  _manualScenarioCount++;
+  const sid = 'SCN-M' + String(_manualScenarioCount).padStart(2,'0');
+  const scenario = {
+    scenario_id: sid,
+    title,
+    description: '',
+    given:  document.getElementById('scnGiven').value.trim()    || 'System is available',
+    when:   document.getElementById('scnWhen').value.trim()     || 'Perform the action',
+    then:   document.getElementById('scnThen').value.trim()     || 'Outcome matches specification',
+    priority: document.getElementById('scnPriority').value,
+    type:     document.getElementById('scnType').value,
+    related_requirement: document.getElementById('scnReq').value.trim() || null,
+    related_endpoint:    document.getElementById('scnEndpoint').value.trim() || null,
+  };
+  _manualScenarioIds.add(sid);
+  _currentScenarios.push(scenario);
+  _saveManualScenarios();
+  _refreshScenariosUI();
+  // reset form fields
+  ['scnTitle','scnGiven','scnWhen','scnThen','scnReq','scnEndpoint'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('scnType').value = 'positive';
+  document.getElementById('scnPriority').value = 'medium';
+  document.getElementById('scnTitle').focus();
+}
+
+function deleteScenario(sid) {
+  _currentScenarios = _currentScenarios.filter(s => s.scenario_id !== sid);
+  _manualScenarioIds.delete(sid);
+  _saveManualScenarios();
+  _refreshScenariosUI();
+}
+
+function toggleScenarioEdit(sid) {
+  const bdd  = document.getElementById('sbdd-'  + sid);
+  const form = document.getElementById('sedit-' + sid);
+  if (!bdd || !form) return;
+  const editing = form.style.display !== 'none';
+  bdd.style.display  = editing ? '' : 'none';
+  form.style.display = editing ? 'none' : '';
+}
+
+function saveScenarioEdit(sid) {
+  const get = id => (document.getElementById(id)?.value || '').trim();
+  const idx = _currentScenarios.findIndex(s => s.scenario_id === sid);
+  if (idx === -1) return;
+  _currentScenarios[idx] = {
+    ..._currentScenarios[idx],
+    title:    get('sedit-title-' + sid),
+    given:    get('sedit-given-' + sid),
+    when:     get('sedit-when-'  + sid),
+    then:     get('sedit-then-'  + sid),
+    type:     get('sedit-type-'  + sid),
+    priority: get('sedit-pri-'   + sid),
+  };
+  if (_manualScenarioIds.has(sid)) _saveManualScenarios();
+  _refreshScenariosUI();
+}
+
+function _refreshScenariosUI() {
+  renderScenarios(_currentScenarios);
+  const n = _currentScenarios.length;
+  document.getElementById('tc1').textContent = n;
+  document.getElementById('genTcBarCount').textContent = n;
+  if (document.getElementById('mv1')) countUp(document.getElementById('mv1'), n);
+}
+
+// ── Input mode tabs ──
+function switchInputTab(type, btn) {
+  document.querySelectorAll('.input-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['text','file','url'].forEach(t => {
+    document.getElementById('ipane-' + t).style.display = t === type ? '' : 'none';
+  });
+}
+
+function _loadTextToReq(text) {
+  const ta = document.getElementById('req');
+  ta.value = text;
+  ta.dispatchEvent(new Event('input'));
+  switchInputTab('text', document.getElementById('itab-text'));
+  ta.focus();
+}
+
+const _SERVER_PARSE_EXTS = ['.pdf', '.docx', '.yaml', '.yml', '.json'];
+
+function _extOf(name) {
+  const m = (name || '').toLowerCase().match(/\.[^.]+$/);
+  return m ? m[0] : '';
+}
+
+function _setFileDropStatus(msg, color) {
+  const drop = document.getElementById('fileDrop');
+  let s = drop.querySelector('.drop-status');
+  if (!s) {
+    s = document.createElement('span');
+    s.className = 'drop-status';
+    s.style.cssText = 'display:block;font-size:.76rem;margin-top:8px';
+    drop.appendChild(s);
+  }
+  s.textContent = msg;
+  s.style.color = color || 'var(--muted)';
+}
+
+async function _parseFileOnServer(file) {
+  if (file.size > 10 * 1024 * 1024) {
+    _setFileDropStatus('⚠ File too large. Maximum 10 MB allowed.', 'var(--rose)');
+    return;
+  }
+  const fd = new FormData();
+  fd.append('file', file);
+  _setFileDropStatus('Parsing & extracting requirements…', 'var(--muted)');
+  try {
+    const r = await fetch('/parse-file', {method: 'POST', body: fd});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    _loadTextToReq(data.content);
+    const note = data.truncated ? ` (truncated from ${data.original_length.toLocaleString()})` : '';
+    _setFileDropStatus('✓ ' + data.content.length.toLocaleString() + ' chars loaded' + note, 'var(--green, #4ade80)');
+  } catch(err) {
+    _setFileDropStatus('⚠ ' + err.message, 'var(--rose)');
+  }
+}
+
+function _handleFile(file) {
+  if (!file) return;
+  const ext = _extOf(file.name);
+  if (_SERVER_PARSE_EXTS.includes(ext)) {
+    _parseFileOnServer(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => _loadTextToReq(e.target.result);
+    reader.readAsText(file, 'utf-8');
+  }
+}
+
+function handleFileSelect(event) {
+  _handleFile(event.target.files[0]);
+  event.target.value = '';
+}
+
+function handleFileDrop(event) {
+  event.preventDefault();
+  document.getElementById('fileDrop').classList.remove('drag-over');
+  _handleFile(event.dataTransfer.files[0]);
+}
+
+async function fetchUrlContent() {
+  const urlInput = document.getElementById('urlInput');
+  const btn = document.getElementById('urlFetchBtn');
+  const status = document.getElementById('urlStatus');
+  const url = urlInput.value.trim();
+  if (!url) { urlInput.focus(); return; }
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+  status.textContent = 'Fetching & extracting requirements…';
+  status.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/fetch-url?url=' + encodeURIComponent(url));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    _loadTextToReq(data.content);
+    status.textContent = '✓ Loaded ' + data.content.length.toLocaleString() + ' chars' + (data.truncated ? ' (truncated to 8000)' : '');
+    status.style.color = 'var(--green, #4ade80)';
+  } catch(err) {
+    status.textContent = '⚠ ' + err.message;
+    status.style.color = 'var(--rose)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Fetch';
+  }
+}
+
+function clearData() {
+  const ta = document.getElementById('req');
+  ta.value = '';
+  ta.dispatchEvent(new Event('input'));
+  _currentText = ''; _lastRunText = '';
+  _currentOverview = null; _currentSuggestions = [];
+  _currentQualityScore = null; _currentScenarios = [];
+  _currentTestCases = []; _currentReqSummary = []; _currentMissingInfo = [];
+  _currentPayloadTemplates = []; _currentTestDataMatrix = [];
+  _currentTechniques = []; _currentFiles = [];
+  _pageSCN = 1; _pageTC = 1; _pageCode = 1; _pageRTM = 1; _pageREQ = 1;
+  _manualScenarioCount = 0; _manualScenarioIds = new Set();
+  hideErr();
+  resetAgents();
+  document.getElementById('previewPanel').classList.remove('show');
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('metrics').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  document.getElementById('retryBtn').style.display = 'none';
+  document.getElementById('genTcBar').style.display = 'none';
+  document.getElementById('addScnSection').style.display = 'none';
+  document.getElementById('addScnForm').style.display = 'none';
+  ta.focus();
+}
+
+function editRequirement() {
+  document.getElementById('previewPanel').classList.remove('show');
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('metrics').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  const ta = document.getElementById('req');
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = ta.value.length;
+  ta.scrollTop = 0;
+  resetAgents();
+}
+
+function retryRun() {
+  if (_lastRunText) {
+    document.getElementById('req').value = _lastRunText;
+    document.getElementById('retryBtn').style.display = 'none';
+    run();
+  }
+}
+
+async function run() {
+  const text = document.getElementById('req').value.trim();
+  if (!text) { document.getElementById('req').focus(); return; }
+  _currentText = text;
+  _lastRunText = text;
+
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
+
+  const btn = document.getElementById('runBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  btn.classList.add('loading'); btn.disabled = true;
+  cancelBtn.disabled = false;
+  retryBtn.style.display = 'none';
+  hideErr();
+  resetAgents();
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('previewPanel').classList.remove('show');
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('metrics').style.display = 'none';
+
+  try {
+    agent(1, 'processing', 'Reading requirement...');
+    const r = await fetch('/preview-requirements', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text, source: 'manual'}),
+      signal,
+    });
+    if (!r.ok) throw new Error(await apiError('Agent 1 preview', r));
+    const data = await r.json();
+    _currentOverview = data.overview || null;
+    _currentSuggestions = data.suggestions || [];
+    _currentQualityScore = data.quality_score || null;
+    const _previewMs = data._meta?.elapsed_ms;
+    agent(1, 'done', `✓ Preview ready${_previewMs ? ` · ${(_previewMs/1000).toFixed(1)}s` : ''}`);
+    renderPreview(data);
+    document.getElementById('previewPanel').classList.add('show');
+  } catch(err) {
+    if (err.name === 'AbortError') {
+      agent(1, '', 'Cancelled');
+      document.getElementById('emptyState').style.display = 'flex';
+    } else {
+      agent(1, 'error', 'Failed');
+      showErr(err.message);
+      retryBtn.style.display = 'flex';
+      document.getElementById('emptyState').style.display = 'flex';
+    }
+  } finally {
+    btn.classList.remove('loading'); btn.disabled = false;
+    cancelBtn.disabled = true;
+    _abortController = null;
+  }
+}
+
+// ── Phase 2a: Confirm → Agent 1 only (analyze → get scenarios) ──
+async function confirm_() {
+  const confirmBtn = document.getElementById('confirmBtn');
+  const confirmSpinner = document.getElementById('confirmSpinner');
+  const confirmText = document.getElementById('confirmBtnText');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const retryBtn = document.getElementById('retryBtn');
+
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
+  _manualScenarioCount = 0;
+  _manualScenarioIds = new Set();
+
+  confirmBtn.disabled = true;
+  confirmSpinner.style.display = 'block';
+  confirmText.textContent = 'Analyzing scenarios...';
+  cancelBtn.disabled = false;
+  retryBtn.style.display = 'none';
+  hideErr();
+
+  try {
+    agent(1, 'processing', 'Generating scenarios...');
+    showSkeleton('sgrid', 4);
+    const r = await fetch('/analyze-requirements', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: _currentText, source: 'manual'}),
+      signal,
+    });
+    if (!r.ok) throw new Error(await apiError('Agent 1', r));
+    const a1 = await r.json();
+    const scenarios = a1.scenarios || [];
+    _currentScenarios = scenarios;
+    _currentReqSummary = a1.requirements_summary || [];
+    _currentMissingInfo = a1.missing_information || [];
+    _pageSCN = 1; _pageRTM = 1; _pageREQ = 1;
+    const _analyzeMs = a1._meta?.elapsed_ms;
+    agent(1, 'done', `✓ ${scenarios.length} scenarios${_analyzeMs ? ` · ${(_analyzeMs/1000).toFixed(1)}s` : ''}`);
+
+    // Load any previously saved manual scenarios for this requirement
+    _loadManualScenarios();
+
+    // Update metrics (partial — tc2/tc3 stay at 0 until Agent 2 runs)
+    document.getElementById('metrics').style.display = 'grid';
+    countUp(document.getElementById('mv1'), _currentScenarios.length);
+    document.getElementById('mv2').textContent = '—';
+    document.getElementById('mv3').textContent = '—';
+    document.getElementById('tc0').textContent = _currentReqSummary.length;
+    document.getElementById('tc1').textContent = _currentScenarios.length;
+    document.getElementById('tc2').textContent = '0';
+    document.getElementById('tc3').textContent = '0';
+
+    renderOverviewTab(_currentOverview, _currentSuggestions, _currentText, _currentReqSummary, _currentQualityScore, _currentMissingInfo);
+    renderScenarios(_currentScenarios);
+    document.getElementById('tc4').textContent = _currentScenarios.length;
+
+    // Show gen-tc bar + add-scenario section
+    document.getElementById('genTcBarCount').textContent = _currentScenarios.length;
+    document.getElementById('genTcBar').style.display = 'flex';
+    document.getElementById('addScnSection').style.display = 'block';
+
+    // Switch to Scenarios tab
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('[onclick="tab(\'scenarios\',this)"]').classList.add('active');
+    document.getElementById('tab-scenarios').classList.add('active');
+
+    document.getElementById('previewPanel').classList.remove('show');
+    document.getElementById('results').classList.add('show');
+
+  } catch(err) {
+    if (err.name === 'AbortError') {
+      agent(1, '', 'Cancelled');
+    } else {
+      agent(1, 'error', 'Failed');
+      showErr(err.message);
+    }
+  } finally {
+    confirmBtn.disabled = false;
+    confirmSpinner.style.display = 'none';
+    confirmText.textContent = '✓ Confirm & Analyze Scenarios';
+    cancelBtn.disabled = true;
+    _abortController = null;
+  }
+}
+
+// ── Phase 2b: Agent 2 (generate test cases from all scenarios) ──
+async function triggerGenerateTC() {
+  const btn = document.getElementById('genTcBtn');
+  const spinner = document.getElementById('genTcSpinner');
+  const btnText = document.getElementById('genTcBtnText');
+  const cancelBtn = document.getElementById('cancelBtn');
+
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
+
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  btnText.textContent = 'Generating…';
+  cancelBtn.disabled = false;
+  hideErr();
+
+  try {
+    agent(2, 'processing', 'Selecting techniques & writing test cases...');
+    showSkeleton('tgrid', 4);
+    _tcFilter = {text: '', tech: '', priority: ''};
+    document.getElementById('tc-filter-bar').innerHTML = '';
+    const r2 = await fetch('/generate-test-cases', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        scenarios: _currentScenarios,
+        requirement_text: _currentText,
+        overview: _currentOverview || undefined,
+      }),
+      signal,
+    });
+    if (!r2.ok) throw new Error(await apiError('Agent 2', r2));
+    const a2 = await r2.json();
+    const testCases = a2.test_cases || [];
+    const techniques = a2.applied_techniques || [];
+    const systemType = a2.system_type || 'traditional';
+    _currentTestCases = testCases;
+    _currentTechniques = techniques;
+    _currentSystemType = systemType;
+    _pageTC = 1;
+    _currentPayloadTemplates = a2.payload_templates || [];
+    _currentTestDataMatrix = a2.test_data_matrix || [];
+    const _tcMs = a2._meta?.elapsed_ms;
+    agent(2, 'done', `✓ ${testCases.length} test cases · ${techniques.length} techniques${_tcMs ? ` · ${(_tcMs/1000).toFixed(1)}s` : ''}`);
+
+    countUp(document.getElementById('mv2'), testCases.length);
+    document.getElementById('tc2').textContent = testCases.length;
+    document.getElementById('tc3').textContent = '0';
+
+    renderTestCases(testCases, techniques, systemType);
+    renderRTM(_currentScenarios, testCases, _currentReqSummary);
+    document.getElementById('tc4').textContent = _currentScenarios.length;
+
+    // Hide gen-tc bar + add scenario section, show code prompt bar
+    document.getElementById('genTcBar').style.display = 'none';
+    document.getElementById('addScnSection').style.display = 'none';
+    document.getElementById('addScnForm').style.display = 'none';
+    agent(3, '', 'Ready');
+    document.getElementById('codePromptBar').style.display = 'flex';
+
+    // Switch to Test Cases tab
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('[onclick="tab(\'testcases\',this)"]').classList.add('active');
+    document.getElementById('tab-testcases').classList.add('active');
+
+  } catch(err) {
+    if (err.name === 'AbortError') {
+      agent(2, '', 'Cancelled');
+    } else {
+      agent(2, 'error', 'Failed');
+      showErr(err.message);
+    }
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    btnText.textContent = '▶ Generate Test Cases';
+    cancelBtn.disabled = true;
+    _abortController = null;
+  }
+}
+
+// ── Agent 3: on-demand code generation ──
+async function runAgent3() {
+  const btn = document.getElementById('genCodeBtn');
+  const spinner = document.getElementById('codeSpinner');
+  const btnText = document.getElementById('genCodeBtnText');
+  const cancelBtn = document.getElementById('cancelBtn');
+
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
+
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  btnText.textContent = 'Generating...';
+  cancelBtn.disabled = false;
+  hideErr();
+
+  try {
+    agent(3, 'processing', 'Writing code...');
+    showSkeleton('cgrid', 3);
+    const r = await fetch('/generate-automation-code', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        test_cases: _currentTestCases,
+        framework: fw,
+        requirement_text: _currentText,
+        payload_templates: _currentPayloadTemplates,
+        test_data_matrix: _currentTestDataMatrix,
+      }),
+      signal,
+    });
+    if (!r.ok) throw new Error(await apiError('Agent 3', r));
+    const a3 = await r.json();
+    const files = a3.generated_files || [];
+    const _codeMs = a3._meta?.elapsed_ms;
+    agent(3, 'done', `✓ ${files.length} files${_codeMs ? ` · ${(_codeMs/1000).toFixed(1)}s` : ''}`);
+
+    countUp(document.getElementById('mv3'), files.length);
+    document.getElementById('tc3').textContent = files.length;
+    _pageCode = 1;
+    renderCode(files, a3.framework || fw);
+    document.getElementById('codePromptBar').style.display = 'none';
+    // Switch to Code Files tab
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('[onclick="tab(\'code\',this)"]').classList.add('active');
+    document.getElementById('tab-code').classList.add('active');
+
+  } catch(err) {
+    if (err.name === 'AbortError') {
+      agent(3, '', 'Cancelled');
+    } else {
+      agent(3, 'error', 'Failed');
+      showErr(err.message);
+    }
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    btnText.textContent = '▶ Generate Code';
+    cancelBtn.disabled = true;
+    _abortController = null;
+  }
+}
+</script>
+</body>
+</html>

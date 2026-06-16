@@ -1,0 +1,10 @@
+.env
+.greennode.json
+.agentbase/
+storage/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+greennode-agentbase-skills/
