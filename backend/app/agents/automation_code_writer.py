@@ -149,7 +149,7 @@ def _parse_json(text: str) -> Dict[str, Any]:
 
 
 _BATCH_SIZE = 1
-_MAX_WORKERS = 5  # concurrent LLM calls for Agent 3
+_MAX_WORKERS = 10  # concurrent LLM calls for Agent 3
 
 
 def _slim_tc(tc: Dict[str, Any]) -> Dict[str, Any]:

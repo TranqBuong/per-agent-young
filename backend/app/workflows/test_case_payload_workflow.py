@@ -98,14 +98,10 @@ class TestCasePayloadWorkflow:
                 result.test_cases.append(TestCaseItem(**fallback))
 
     def _deduplicate_test_cases(self, result: TestCasePayloadResult) -> None:
-        """AI-powered semantic dedup, with string-match fallback on any error."""
+        """String-fingerprint dedup — fast, no extra LLM call."""
         if len(result.test_cases) < 2:
             return
-        try:
-            self._deduplicate_test_cases_ai(result)
-        except Exception as e:
-            warnings.warn(f"AI dedup unavailable ({type(e).__name__}: {e}), using string match")
-            self._deduplicate_test_cases_string(result)
+        self._deduplicate_test_cases_string(result)
 
     def _deduplicate_test_cases_ai(self, result: TestCasePayloadResult) -> None:
         """Ask the LLM to identify semantic duplicates across all test cases."""

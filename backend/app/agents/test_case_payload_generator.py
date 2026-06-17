@@ -45,29 +45,6 @@ def make_fallback_tc(s: Dict[str, Any], index: int) -> Dict[str, Any]:
         "tags": [s.get("type", "positive"), "uc"],
     }
 
-_TECHNIQUE_SELECTION_PROMPT = """You are a QA expert. Given a requirement and its scenarios, select the test design techniques that MUST be applied for thorough coverage.
-
-Available techniques:
-Traditional: EP(equivalence partitioning), BVA(boundary value analysis), DT(decision table), ST(state transition), UC(use case testing), EG(error guessing)
-AI/ML systems: FA(functional accuracy), RT(robustness testing), CT(consistency testing), HD(hallucination detection), BF(bias & fairness), OV(output validation), BP(boundary probing)
-
-Rules:
-- Classify system as "traditional", "ai", or "hybrid"
-- Select ONLY techniques that genuinely apply to this requirement
-- For each technique, specify which scenario IDs it applies to
-- Use each scenario's related_requirement and related_endpoint when available to ground your selection
-- Be selective: 3-6 techniques is typical; do not list a technique you cannot justify
-
-Return ONLY valid JSON:
-{
-  "system_type": "traditional",
-  "selected_techniques": [
-    {
-      "technique": "EP",
-      "applicable_scenarios": ["SCN-001", "SCN-003"]
-    }
-  ]
-}"""
 
 _TEST_CASE_GENERATION_PROMPT = """You are a QA engineer. Apply EVERY listed technique to the scenarios. Be CONCISE.
 
@@ -117,7 +94,6 @@ def _extract_json(text: str) -> str:
     if start == -1:
         raise ValueError("No JSON object found in response")
     depth, in_string, escape_next = 0, False, False
-    last_valid_end = -1
     for i, ch in enumerate(text[start:], start):
         if escape_next:
             escape_next = False; continue
@@ -131,14 +107,8 @@ def _extract_json(text: str) -> str:
                 depth -= 1
                 if depth == 0:
                     return text[start:i+1]
-                if depth == 1:
-                    last_valid_end = i  # last closed inner object
     # JSON was truncated — close all open structures
     partial = text[start:]
-    # Count unclosed brackets
-    opens = partial.count('{') - partial.count('}')
-    arrays = partial.count('[') - partial.count(']')
-    # Strip trailing incomplete item (find last complete '}')
     last_brace = partial.rfind('}')
     if last_brace != -1:
         partial = partial[:last_brace+1]
@@ -211,20 +181,24 @@ class TestCasePayloadGenerator:
         self.model = model or os.environ.get("GREENNODE_MODEL", _DEFAULT_MODEL)
         self.light_model = os.environ.get("GREENNODE_MODEL_LIGHT", _DEFAULT_MODEL)
 
-    def _call(self, system: str, user: str, max_tokens: int, light: bool = False) -> Dict[str, Any]:
+    def _call(
+        self, system: str, user: str, max_tokens: int,
+        light: bool = False, use_json_format: bool = True,
+    ) -> Dict[str, Any]:
         model = self.light_model if light else self.model
 
         def _once(u=user):
-            completion = self.client.chat.completions.create(
-                model=model, max_tokens=max_tokens, temperature=0, seed=42,
-                response_format={"type": "json_object"},
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": u}],
-            )
+            kwargs = dict(model=model, max_tokens=max_tokens, temperature=0, seed=42,
+                          messages=[{"role": "system", "content": system}, {"role": "user", "content": u}])
+            if use_json_format:
+                # GreenNode bug: response_format + max_tokens >= ~2000 → empty content.
+                # Only use json_object mode when max_tokens is safely below the threshold.
+                kwargs["response_format"] = {"type": "json_object"}
+            completion = self.client.chat.completions.create(**kwargs)
             raw = completion.choices[0].message.content or ""
             if not raw.strip():
                 finish = completion.choices[0].finish_reason
                 if finish == "length":
-                    # response_format + truncation → empty content from GreenNode; fall to retry without response_format
                     raise json.JSONDecodeError(f"Empty response (finish_reason=length)", "", 0)
                 raise ValueError(f"Empty response (finish_reason={finish})")
             return _parse_json(raw)
@@ -234,8 +208,7 @@ class TestCasePayloadGenerator:
         except (BadRequestError, json.JSONDecodeError) as e:
             if isinstance(e, BadRequestError) and "json_validate_failed" not in str(e):
                 raise RuntimeError(f"API bad request: {e}") from e
-            # json_validate_failed OR finish_reason=length with empty content
-            # → retry without response_format, same user message (don't grow input)
+            # Retry without response_format regardless of the cause
             def _retry_once(u=user):
                 completion = self.client.chat.completions.create(
                     model=model, max_tokens=max_tokens, temperature=0, seed=42,
@@ -270,7 +243,7 @@ class TestCasePayloadGenerator:
             if ov_parts:
                 overview_ctx = "API Overview:\n" + "\n".join(ov_parts)
 
-        # ── Call 1: select techniques ──────────────────────────────
+        # ── Technique selection: rule-based heuristic (no LLM call) ──────────
         slim_scenarios = [
             {
                 'scenario_id':       s.get('scenario_id', ''),
@@ -287,47 +260,47 @@ class TestCasePayloadGenerator:
             for s in scenarios
         ]
 
-        context_parts = []
-        if overview_ctx:
-            context_parts.append(overview_ctx)
-        if requirement_text:
-            context_parts.append(f"Requirement:\n{_trunc(requirement_text, 3200)}")
-        context_parts.append(f"Scenarios:\n{json.dumps(slim_scenarios, ensure_ascii=False, indent=2)}")
+        scenario_ids_all = [s['scenario_id'] for s in slim_scenarios]
+        types_present = {s.get('type', '').lower() for s in slim_scenarios}
 
-        selection_result = self._call(
-            system=_TECHNIQUE_SELECTION_PROMPT,
-            user="Select applicable test design techniques for:\n\n" + "\n\n".join(context_parts),
-            max_tokens=600,
-            light=True,
-        )
-
-        selected_techniques = selection_result.get("selected_techniques", [])
-        system_type = selection_result.get("system_type", "traditional")
-
+        _TYPE_TECHNIQUE_MAP = [
+            ({'positive', 'edge case'},          'EP',  'equivalence partitioning'),
+            ({'boundary'},                        'BVA', 'boundary value analysis'),
+            ({'negative', 'security'},            'EG',  'error guessing'),
+            ({'positive', 'negative', 'edge case', 'boundary', 'security'}, 'UC', 'use case testing'),
+        ]
+        selected_techniques = []
+        for trigger_types, technique, rationale in _TYPE_TECHNIQUE_MAP:
+            if types_present & trigger_types and len(selected_techniques) < 4:
+                selected_techniques.append({
+                    "technique": technique,
+                    "rationale": rationale,
+                    "applicable_scenarios": scenario_ids_all,
+                })
         if not selected_techniques:
-            scenario_ids_all = [s["scenario_id"] for s in slim_scenarios]
             selected_techniques = [
-                {"technique": "EP", "rationale": "Default equivalence partitioning", "applicable_scenarios": scenario_ids_all},
-                {"technique": "EG", "rationale": "Default error guessing", "applicable_scenarios": scenario_ids_all},
+                {"technique": "EP", "rationale": "default", "applicable_scenarios": scenario_ids_all},
+                {"technique": "EG", "rationale": "default", "applicable_scenarios": scenario_ids_all},
             ]
 
+        system_type = "traditional"
+
         # ── Call 2: generate test cases ──────────────────────────────
-        selected_techniques = selected_techniques[:4]
         technique_ids = [t["technique"] for t in selected_techniques]
         techniques_detail = "\n".join(
             f"- {t['technique']}: {(t.get('rationale') or '')[:60]}"
             for t in selected_techniques
         )
 
-        # Limit to 10 scenarios for TC generation — fallback covers the rest
+        # Take top 15 scenarios by priority — fallback covers any remainder
         _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
         slim_scenarios_tc = sorted(
             slim_scenarios, key=lambda s: _PRIORITY_ORDER.get(s.get("priority", "low"), 2)
-        )[:10]
+        )[:15]
 
         scenario_ids = [s['scenario_id'] for s in slim_scenarios_tc]
         ov_header = f"{overview_ctx}\n\n" if overview_ctx else ""
-        req_context = f"Requirement:\n{_trunc(requirement_text, 1500)}\n\n" if requirement_text else ""
+        req_context = f"Requirement:\n{_trunc(requirement_text, 2500)}\n\n" if requirement_text else ""
         tc_user = (
             f"{ov_header}"
             f"{req_context}"
@@ -337,10 +310,13 @@ class TestCasePayloadGenerator:
             f"Scenarios:\n{json.dumps(slim_scenarios_tc, ensure_ascii=False)}"
         )
 
+        # use_json_format=False: avoids GreenNode empty-content bug above ~1800 tokens,
+        # allowing max_tokens=3000 for larger scenario sets.
         tc_result = self._call(
             system=_TEST_CASE_GENERATION_PROMPT,
             user=tc_user,
-            max_tokens=1800,
+            max_tokens=3000,
+            use_json_format=False,
         )
 
         test_cases = tc_result.get("test_cases", [])
