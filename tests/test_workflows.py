@@ -126,7 +126,9 @@ class TestGroundingValidation:
         wf._validate_grounding(scenarios, result)
         assert len(result.test_cases) == 2
 
-    def test_tc_with_none_scenario_id_is_kept(self):
+    def test_tc_with_none_scenario_id_is_dropped(self):
+        # TC with no scenario_id is treated as hallucinated and removed;
+        # the covered scenario still has its valid TC so no fallback is added.
         from backend.app.workflows.test_case_payload_workflow import TestCasePayloadWorkflow
         wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
 
@@ -134,12 +136,262 @@ class TestGroundingValidation:
         result = TestCasePayloadResult(
             test_cases=[
                 self._make_tc("TC-EP-001", "SCN-001"),
-                self._make_tc("TC-UC-001", None),  # no scenario_id — allowed
+                self._make_tc("TC-UC-001", None),  # no scenario_id — should be dropped
             ],
         )
         scenarios = self._scenarios(["SCN-001"])
         wf._validate_grounding(scenarios, result)
-        assert len(result.test_cases) == 2
+        # None-scenario_id TC is dropped; SCN-001 is still covered so no fallback added
+        assert len(result.test_cases) == 1
+        assert result.test_cases[0].test_case_id == "TC-EP-001"
+
+
+# ── Deduplication — string fallback (no generator) ────────────────────────────
+
+class TestDeduplicationStringFallback:
+    """Tests run via _deduplicate_test_cases_string directly (no LLM needed)."""
+
+    def _wf(self):
+        return TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+
+    def _tc(self, tc_id, sid, name, expected="200 OK", steps=None, test_data=None, priority="medium", technique="EP"):
+        return TestCaseItem(
+            test_case_id=tc_id, name=name, scenario_id=sid,
+            technique=technique, expected_result=expected,
+            steps=steps or [], test_data=test_data or {},
+            priority=priority,
+        )
+
+    def _result(self, tcs):
+        return TestCasePayloadResult(test_cases=tcs)
+
+    def test_no_duplicates_unchanged(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login"),
+            self._tc("TC-EP-002", "SCN-001", "Invalid password"),
+            self._tc("TC-EP-003", "SCN-002", "Valid registration"),
+        ])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 3
+
+    def test_exact_duplicate_removed(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK"),
+            self._tc("TC-BVA-001", "SCN-001", "Valid login", "200 OK"),
+        ])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 1
+
+    def test_keeps_richer_duplicate(self):
+        wf = self._wf()
+        sparse = self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK",
+                          steps=["step1"], test_data={}, priority="low")
+        rich = self._tc("TC-BVA-001", "SCN-001", "Valid login", "200 OK",
+                        steps=["step1", "step2", "step3"],
+                        test_data={"email": "a@b.com"}, priority="high")
+        r = self._result([sparse, rich])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 1
+        assert r.test_cases[0].test_case_id == "TC-BVA-001"
+
+    def test_case_insensitive_name_match(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid Login", "200 OK"),
+            self._tc("TC-BVA-001", "SCN-001", "valid login", "200 OK"),
+        ])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 1
+
+    def test_punctuation_ignored_in_name(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid Login!", "200 OK"),
+            self._tc("TC-BVA-001", "SCN-001", "Valid Login.", "200 OK"),
+        ])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 1
+
+    def test_different_scenarios_not_deduplicated(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid input", "200 OK"),
+            self._tc("TC-EP-002", "SCN-002", "Valid input", "200 OK"),
+        ])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 2
+
+    def test_different_expected_results_not_deduplicated(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Login attempt", "200 OK"),
+            self._tc("TC-EP-002", "SCN-001", "Login attempt", "401 Unauthorized"),
+        ])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 2
+
+    def test_multiple_duplicates_all_removed(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK"),
+            self._tc("TC-BVA-001", "SCN-001", "Valid login", "200 OK"),
+            self._tc("TC-DT-001", "SCN-001", "Valid login", "200 OK"),
+        ])
+        wf._deduplicate_test_cases_string(r)
+        assert len(r.test_cases) == 1
+
+    def test_empty_list_unchanged(self):
+        wf = self._wf()
+        r = self._result([])
+        wf._deduplicate_test_cases(r)
+        assert r.test_cases == []
+
+    def test_string_dedup_warning_issued(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK"),
+            self._tc("TC-BVA-001", "SCN-001", "Valid login", "200 OK"),
+        ])
+        import warnings as _warnings
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            wf._deduplicate_test_cases_string(r)
+            assert any("dedup" in str(x.message).lower() for x in w)
+
+    def test_no_warning_when_no_duplicates(self):
+        wf = self._wf()
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login"),
+            self._tc("TC-EP-002", "SCN-001", "Invalid login"),
+        ])
+        import warnings as _warnings
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            wf._deduplicate_test_cases_string(r)
+            assert not any("dedup" in str(x.message).lower() for x in w)
+
+
+# ── Deduplication — AI path (mocked LLM) ──────────────────────────────────────
+
+class TestDeduplicationAI:
+    def _wf_with_mock_generator(self, llm_response: dict):
+        wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+        wf.generator = MagicMock()
+        wf.generator._call.return_value = llm_response
+        return wf
+
+    def _tc(self, tc_id, sid, name, expected="200 OK", steps=None, technique="EP"):
+        return TestCaseItem(
+            test_case_id=tc_id, name=name, scenario_id=sid,
+            technique=technique, expected_result=expected,
+            steps=steps or [], test_data={}, priority="medium",
+        )
+
+    def _result(self, tcs):
+        return TestCasePayloadResult(test_cases=tcs)
+
+    def test_ai_removes_duplicate(self):
+        wf = self._wf_with_mock_generator({
+            "keep": ["TC-EP-001"],
+            "removed": [{"id": "TC-BVA-001", "reason": "same scenario and result"}],
+        })
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login"),
+            self._tc("TC-BVA-001", "SCN-001", "Valid login — boundary"),
+        ])
+        wf._deduplicate_test_cases_ai(r)
+        assert len(r.test_cases) == 1
+        assert r.test_cases[0].test_case_id == "TC-EP-001"
+
+    def test_ai_no_duplicates_keeps_all(self):
+        wf = self._wf_with_mock_generator({
+            "keep": ["TC-EP-001", "TC-EP-002"],
+            "removed": [],
+        })
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login"),
+            self._tc("TC-EP-002", "SCN-001", "Invalid login"),
+        ])
+        wf._deduplicate_test_cases_ai(r)
+        assert len(r.test_cases) == 2
+
+    def test_ai_warning_per_removed_tc(self):
+        wf = self._wf_with_mock_generator({
+            "keep": ["TC-EP-001"],
+            "removed": [
+                {"id": "TC-BVA-001", "reason": "dup A"},
+                {"id": "TC-DT-001", "reason": "dup B"},
+            ],
+        })
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login"),
+            self._tc("TC-BVA-001", "SCN-001", "Valid login v2"),
+            self._tc("TC-DT-001", "SCN-001", "Valid login v3"),
+        ])
+        import warnings as _warnings
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            wf._deduplicate_test_cases_ai(r)
+            dedup_warns = [x for x in w if "dedup (ai)" in str(x.message).lower()]
+            assert len(dedup_warns) == 2
+
+    def test_ai_unknown_id_raises(self):
+        wf = self._wf_with_mock_generator({
+            "keep": ["TC-EP-001", "GHOST-999"],
+            "removed": [],
+        })
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login"),
+            self._tc("TC-EP-002", "SCN-001", "Invalid login"),
+        ])
+        import pytest as _pytest
+        with _pytest.raises(ValueError, match="unknown IDs"):
+            wf._deduplicate_test_cases_ai(r)
+
+    def test_ai_missing_id_raises(self):
+        wf = self._wf_with_mock_generator({
+            "keep": ["TC-EP-001"],
+            "removed": [],  # TC-EP-002 not accounted for
+        })
+        r = self._result([
+            self._tc("TC-EP-001", "SCN-001", "Valid login"),
+            self._tc("TC-EP-002", "SCN-001", "Invalid login"),
+        ])
+        import pytest as _pytest
+        with _pytest.raises(ValueError, match="not account"):
+            wf._deduplicate_test_cases_ai(r)
+
+    def test_dispatcher_falls_back_on_llm_error(self):
+        """When AI call fails, dispatcher falls back to string dedup silently."""
+        wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
+        wf.generator = MagicMock()
+        wf.generator._call.side_effect = RuntimeError("rate limit")
+        r = TestCasePayloadResult(test_cases=[
+            self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK"),
+            self._tc("TC-BVA-001", "SCN-001", "valid login", "200 OK"),  # string dup
+        ])
+        import warnings as _warnings
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            wf._deduplicate_test_cases(r)
+        assert any("ai dedup unavailable" in str(x.message).lower() for x in w)
+        assert len(r.test_cases) == 1  # string fallback removed the dup
+
+    def test_dispatcher_falls_back_when_no_generator(self):
+        """When generator attribute is missing (unit test env), falls back to string dedup."""
+        wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)  # no __init__
+        r = TestCasePayloadResult(test_cases=[
+            self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK"),
+            self._tc("TC-BVA-001", "SCN-001", "Valid login", "200 OK"),
+        ])
+        import warnings as _warnings
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            wf._deduplicate_test_cases(r)
+        assert any("ai dedup unavailable" in str(x.message).lower() for x in w)
+        assert len(r.test_cases) == 1
 
 
 # ── TC ID rebuild ─────────────────────────────────────────────────────────────

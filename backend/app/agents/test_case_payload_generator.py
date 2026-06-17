@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import re
 from typing import List, Dict, Any, Optional
 
-from groq import Groq, BadRequestError
+from openai import OpenAI, BadRequestError
 from backend.app.services.groq_retry import call_with_backoff
+
+_logger = logging.getLogger(__name__)
 
 
 def _trunc(text: str, limit: int) -> str:
@@ -21,14 +24,22 @@ def make_fallback_tc(s: Dict[str, Any], index: int) -> Dict[str, Any]:
     given = (s.get("given") or "System is available").strip() or "System is available"
     when  = (s.get("when")  or "Perform the action").strip()  or "Perform the action"
     then  = (s.get("then")  or "Outcome matches specification").strip() or "Outcome matches specification"
+    # Build minimal test_data so Agent 3 has something to work with (E6 fix)
+    test_data: Dict[str, Any] = {}
+    endpoint = (s.get("related_endpoint") or "").strip()
+    if endpoint:
+        test_data["endpoint"] = endpoint
+    generic_when = ("Perform the action", "")
+    if when not in generic_when:
+        test_data["action"] = when[:100]
     return {
-        "test_case_id": f"TC-{sid.split('-')[-1].zfill(3)}",
+        "test_case_id": f"TC-UC-{sid.split('-')[-1].zfill(3)}",
         "name": (s.get("title") or sid)[:50],
         "scenario_id": sid,
         "technique": "UC",
         "preconditions": given,
         "steps": [given, when, f"Verify: {then}"],
-        "test_data": {},
+        "test_data": test_data,
         "expected_result": then,
         "priority": s.get("priority", "medium"),
         "tags": [s.get("type", "positive"), "uc"],
@@ -44,6 +55,7 @@ Rules:
 - Classify system as "traditional", "ai", or "hybrid"
 - Select ONLY techniques that genuinely apply to this requirement
 - For each technique, specify which scenario IDs it applies to
+- Use each scenario's related_requirement and related_endpoint when available to ground your selection
 - Be selective: 3-6 techniques is typical; do not list a technique you cannot justify
 
 Return ONLY valid JSON:
@@ -52,7 +64,6 @@ Return ONLY valid JSON:
   "selected_techniques": [
     {
       "technique": "EP",
-      "rationale": "Email and password fields have valid/invalid input partitions",
       "applicable_scenarios": ["SCN-001", "SCN-003"]
     }
   ]
@@ -72,6 +83,7 @@ _TEST_CASE_GENERATION_PROMPT = """You are a QA engineer. Apply EVERY listed tech
 - Total test_cases >= total scenarios
 - Every technique MUST appear in at least one test_case
 - scenario_id in each test case MUST exactly match one of the input scenario_ids
+- If a scenario includes related_endpoint, reflect that endpoint in the action step or expected outcome when appropriate
 
 ## Format rules
 - Keep fields SHORT: name ≤10 words, preconditions ≤15 words, steps exactly 3 short strings, expected_result ≤15 words
@@ -86,13 +98,13 @@ Return ONLY valid JSON:
   "test_cases": [
     {
       "test_case_id": "TC-EP-001",
-      "name": "Valid email login",
+      "name": "Valid input returns success",
       "scenario_id": "SCN-001",
       "technique": "EP",
-      "preconditions": "User exists, system available",
-      "steps": ["POST /login with valid credentials", "Verify 200 response", "Check token in response"],
-      "test_data": {"email": "user@test.com", "password": "Pass123!"},
-      "expected_result": "200 OK with auth token",
+      "preconditions": "System available, required resources exist",
+      "steps": ["Prepare valid input data per requirement", "Send request to the target endpoint", "Verify response matches expected outcome"],
+      "test_data": {"field": "valid_value"},
+      "expected_result": "Success response with expected payload",
       "priority": "high",
       "tags": ["positive", "ep"]
     }
@@ -146,6 +158,7 @@ def _parse_json(text: str) -> Dict[str, Any]:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        # Repair pass 1: escape unescaped control characters inside strings
         out, in_string, escape_next = [], False, False
         for ch in text:
             if escape_next:
@@ -160,25 +173,43 @@ def _parse_json(text: str) -> Dict[str, Any]:
                 out.append('\\r')
             elif in_string and ch == '\t':
                 out.append('\\t')
+            elif in_string and ord(ch) < 0x20:
+                out.append(f'\\u{ord(ch):04x}')
             else:
                 out.append(ch)
-        return json.loads(''.join(out))
+        repaired = ''.join(out)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            # Repair pass 2: add missing commas between values on separate lines.
+            # After pass 1, all newlines inside strings are escaped, so remaining
+            # newlines are structural — safe to insert commas before next tokens.
+            repaired2 = re.sub(
+                r'([\]}"0-9]|true|false|null)([ \t]*\n[ \t]*)("|\{|\[)',
+                r'\1,\2\3',
+                repaired,
+            )
+            return json.loads(repaired2)
 
 
-_DEFAULT_MODEL = "llama-3.1-8b-instant"
+_DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
+_AIP_BASE_URL = "https://maas-llm-aiplatform-hcm.api.vngcloud.vn/v1"
 
 
 class TestCasePayloadGenerator:
     def __init__(self, model: str = None):
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = os.environ.get("GREENNODE_AIP_KEY")
         if not api_key:
             raise RuntimeError(
-                "GROQ_API_KEY environment variable is not set. "
-                "Export it before starting the server: export GROQ_API_KEY=<your-key>"
+                "GREENNODE_AIP_KEY environment variable is not set. "
+                "Export it before starting the server: export GREENNODE_AIP_KEY=<your-key>"
             )
-        self.client = Groq(api_key=api_key)
-        self.model = model or os.environ.get("GROQ_MODEL", _DEFAULT_MODEL)
-        self.light_model = os.environ.get("GROQ_MODEL_LIGHT", _DEFAULT_MODEL)
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=os.environ.get("GREENNODE_AIP_BASE_URL", _AIP_BASE_URL),
+        )
+        self.model = model or os.environ.get("GREENNODE_MODEL", _DEFAULT_MODEL)
+        self.light_model = os.environ.get("GREENNODE_MODEL_LIGHT", _DEFAULT_MODEL)
 
     def _call(self, system: str, user: str, max_tokens: int, light: bool = False) -> Dict[str, Any]:
         model = self.light_model if light else self.model
@@ -191,16 +222,32 @@ class TestCasePayloadGenerator:
             )
             raw = completion.choices[0].message.content or ""
             if not raw.strip():
-                raise ValueError(f"Empty response (finish_reason={completion.choices[0].finish_reason})")
+                finish = completion.choices[0].finish_reason
+                if finish == "length":
+                    # response_format + truncation → empty content from GreenNode; fall to retry without response_format
+                    raise json.JSONDecodeError(f"Empty response (finish_reason=length)", "", 0)
+                raise ValueError(f"Empty response (finish_reason={finish})")
             return _parse_json(raw)
 
         try:
             return call_with_backoff(_once, label="Agent2")
-        except BadRequestError as e:
-            if "json_validate_failed" in str(e):
-                retry_user = "IMPORTANT: Output ONLY valid JSON.\n\n" + user
-                return call_with_backoff(lambda: _once(retry_user), label="Agent2-retry")
-            raise RuntimeError(f"Groq bad request: {e}") from e
+        except (BadRequestError, json.JSONDecodeError) as e:
+            if isinstance(e, BadRequestError) and "json_validate_failed" not in str(e):
+                raise RuntimeError(f"API bad request: {e}") from e
+            # json_validate_failed OR finish_reason=length with empty content
+            # → retry without response_format, same user message (don't grow input)
+            def _retry_once(u=user):
+                completion = self.client.chat.completions.create(
+                    model=model, max_tokens=max_tokens, temperature=0, seed=42,
+                    messages=[{"role": "system", "content": system}, {"role": "user", "content": u}],
+                )
+                raw = completion.choices[0].message.content or ""
+                finish = completion.choices[0].finish_reason
+                if not raw.strip():
+                    _logger.warning("Agent2-retry empty content finish_reason=%s — returning empty TCs", finish)
+                    return {"test_cases": []}
+                return _parse_json(raw)
+            return call_with_backoff(_retry_once, label="Agent2-retry")
 
     def generate(
         self,
@@ -208,6 +255,20 @@ class TestCasePayloadGenerator:
         requirement_text: Optional[str] = None,
         overview: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        requirement_text = requirement_text.replace('\\', '/').replace('"', "'") if requirement_text else requirement_text
+
+        # Build compact overview context from Agent 1 output (E1 fix)
+        overview_ctx = ""
+        if overview:
+            ov_parts = []
+            endpoints = overview.get("endpoints") or []
+            rules = overview.get("business_rules") or []
+            if endpoints:
+                ov_parts.append("Endpoints: " + ", ".join(str(ep)[:60] for ep in endpoints[:6]))
+            if rules:
+                ov_parts.append("Business rules: " + "; ".join(str(r)[:80] for r in rules[:5]))
+            if ov_parts:
+                overview_ctx = "API Overview:\n" + "\n".join(ov_parts)
 
         # ── Call 1: select techniques ──────────────────────────────
         slim_scenarios = [
@@ -217,17 +278,20 @@ class TestCasePayloadGenerator:
                 'description':       (s.get('description') or '')[:100],
                 'type':              s.get('type', ''),
                 'priority':          s.get('priority', ''),
+                'related_requirement': s.get('related_requirement') or '',
                 'related_endpoint':  s.get('related_endpoint') or '',
-                'given':             _trunc(s.get('given') or '', 200),
-                'when':              _trunc(s.get('when') or '', 200),
-                'then':              _trunc(s.get('then') or '', 200),
+                'given':             _trunc(s.get('given') or '', 500),
+                'when':              _trunc(s.get('when') or '', 500),
+                'then':              _trunc(s.get('then') or '', 500),
             }
             for s in scenarios
         ]
 
         context_parts = []
+        if overview_ctx:
+            context_parts.append(overview_ctx)
         if requirement_text:
-            context_parts.append(f"Requirement:\n{_trunc(requirement_text, 1500)}")
+            context_parts.append(f"Requirement:\n{_trunc(requirement_text, 3200)}")
         context_parts.append(f"Scenarios:\n{json.dumps(slim_scenarios, ensure_ascii=False, indent=2)}")
 
         selection_result = self._call(
@@ -248,27 +312,35 @@ class TestCasePayloadGenerator:
             ]
 
         # ── Call 2: generate test cases ──────────────────────────────
-        selected_techniques = selected_techniques[:5]
+        selected_techniques = selected_techniques[:4]
         technique_ids = [t["technique"] for t in selected_techniques]
         techniques_detail = "\n".join(
-            f"- {t['technique']}: {(t.get('rationale') or '')[:80]}"
+            f"- {t['technique']}: {(t.get('rationale') or '')[:60]}"
             for t in selected_techniques
         )
 
-        scenario_ids = [s['scenario_id'] for s in slim_scenarios]
-        req_context = f"Requirement context:\n{_trunc(requirement_text, 1500)}\n\n" if requirement_text else ""
+        # Limit to 10 scenarios for TC generation — fallback covers the rest
+        _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+        slim_scenarios_tc = sorted(
+            slim_scenarios, key=lambda s: _PRIORITY_ORDER.get(s.get("priority", "low"), 2)
+        )[:10]
+
+        scenario_ids = [s['scenario_id'] for s in slim_scenarios_tc]
+        ov_header = f"{overview_ctx}\n\n" if overview_ctx else ""
+        req_context = f"Requirement:\n{_trunc(requirement_text, 1500)}\n\n" if requirement_text else ""
         tc_user = (
+            f"{ov_header}"
             f"{req_context}"
             f"Techniques: {', '.join(technique_ids)}\n"
             f"Scenarios to cover: {', '.join(scenario_ids)}\n\n"
             f"Technique details:\n{techniques_detail}\n\n"
-            f"Scenarios:\n{json.dumps(slim_scenarios, ensure_ascii=False)}"
+            f"Scenarios:\n{json.dumps(slim_scenarios_tc, ensure_ascii=False)}"
         )
 
         tc_result = self._call(
             system=_TEST_CASE_GENERATION_PROMPT,
             user=tc_user,
-            max_tokens=3500,
+            max_tokens=1800,
         )
 
         test_cases = tc_result.get("test_cases", [])
@@ -299,11 +371,31 @@ class TestCasePayloadGenerator:
             tech = (tc.get("technique") or "UC").upper()
             tech_counters[tech] = tech_counters.get(tech, 0) + 1
             tc["test_case_id"] = f"TC-{tech}-{tech_counters[tech]:03d}"
-            tc["technique"] = tech  # normalize so technique field matches the rebuilt ID
+            tc["technique"] = tech
 
-        # Keep only techniques actually used
+        # Build actual scenario coverage per technique from generated test_cases
+        tech_scenarios: Dict[str, List[str]] = {}
+        for tc in test_cases:
+            tech = tc.get("technique", "")
+            sid = tc.get("scenario_id", "")
+            if tech and sid and sid not in tech_scenarios.get(tech, []):
+                tech_scenarios.setdefault(tech, []).append(sid)
+
+        # Keep all actually-used techniques; include any the LLM introduced beyond the selection
         used = {tc["technique"] for tc in test_cases}
-        verified_techniques = [t for t in selected_techniques if t["technique"] in used]
+        selected_tech_ids = {t["technique"] for t in selected_techniques}
+        verified_techniques = []
+        for t in selected_techniques:
+            if t["technique"] in used:
+                entry = dict(t)
+                entry["applicable_scenarios"] = tech_scenarios.get(t["technique"], [])
+                verified_techniques.append(entry)
+        for tech in used - selected_tech_ids:
+            verified_techniques.append({
+                "technique": tech,
+                "rationale": "applied by LLM",
+                "applicable_scenarios": tech_scenarios.get(tech, []),
+            })
 
         return {
             "system_type": system_type,

@@ -1,4 +1,4 @@
-# Multi-Agent Quality Engineer — Test Pilot
+# Multi-Agent Quality Engineer — QE Agent
 
 Hệ thống tự động phân tích requirement và sinh test case, test data, automation code qua 3 AI agent.
 
@@ -51,14 +51,14 @@ cp .env.example .env
 
 ```bash
 # Cách 1 — load .env tự động
-export $(cat .env | xargs) && uvicorn backend.main:app --reload --port 8000
+export $(cat .env | xargs) && uvicorn backend.main:app --reload --port 8080
 
 # Cách 2 — set thủ công
 export GROQ_API_KEY=your-key-here
-uvicorn backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8080
 ```
 
-Mở trình duyệt tại: **http://localhost:8000**
+Mở trình duyệt tại: **http://localhost:8080**
 
 ## Sử dụng
 
@@ -67,7 +67,7 @@ Mở trình duyệt tại: **http://localhost:8000**
 3. **Confirm** — Xác nhận scenarios (có thể chỉnh sửa inline hoặc thêm thủ công)
 4. **Generate Test Cases** — Agent 2 sinh test cases theo kỹ thuật phù hợp
 5. **Generate Code** — Agent 3 sinh automation code theo framework đã chọn
-6. **Export** — Tải RTM (Excel) hoặc test cases (CSV)
+6. **Export** — Tải RTM (Excel) hoặc Test Cases (Excel)
 
 ## Input được hỗ trợ
 
@@ -104,4 +104,4 @@ python -m pytest tests/ -v
 
 ## Cache
 
-Kết quả LLM được cache trên disk (thư mục `backend/app/output/cache/`), TTL 2 ngày, hash key SHA256. Cache có **similarity fallback**: nếu requirement text mới > 85% giống text đã cache, hệ thống trả về kết quả cũ thay vì gọi LLM lại.
+Kết quả LLM được cache trên disk (thư mục `storage/`), TTL 2 ngày, hash key SHA256. Cache có **similarity fallback**: nếu requirement text mới > 85% giống text đã cache, hệ thống trả về kết quả cũ thay vì gọi LLM lại.

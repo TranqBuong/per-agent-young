@@ -7,7 +7,7 @@ from backend.app.agents.test_case_payload_generator import (
     _parse_json,
     make_fallback_tc,
 )
-from backend.app.agents.requirement_analyzer import _compute_quality_score
+from backend.app.agents.requirement_analyzer import _compute_quality_score, _parse_json as requirement_parse_json
 from backend.app.agents.automation_code_writer import _parse_separator
 
 
@@ -126,13 +126,25 @@ ALL_FALSE_CHECKS = {
     "completeness": {k: False for k in ALL_TRUE_CHECKS["completeness"]},
     "testability": {k: False for k in ALL_TRUE_CHECKS["testability"]},
     "clarity_positive": {k: False for k in ALL_TRUE_CHECKS["clarity_positive"]},
+    # Enough items to max out ALL 4 deduction categories:
+    # vague_words ≥4 → cap -20 | undefined_terms ≥3 → cap -15
+    # conflicting_statements ≥2 → cap -20 | implicit_assumptions ≥2 → cap -10
+    # Total: 50 (base) - 65 (max deductions) = -15 → clamped to 0
     "clarity_issues": {
-        "vague_words": ["fast", "good", "nice", "appropriate", "simple"],
-        "undefined_terms": [],
-        "conflicting_statements": [],
-        "implicit_assumptions": [],
+        "vague_words": ["fast", "good", "nice", "appropriate"],
+        "undefined_terms": ["SLA", "PII", "KPI"],
+        "conflicting_statements": ["field required vs optional", "auth vs public"],
+        "implicit_assumptions": ["user exists", "token valid"],
     },
 }
+
+
+class TestRequirementAnalyzerJsonParsing:
+    def test_parse_json_with_unescaped_inner_quotes(self):
+        text = '{"summary": "Use "quotes" inside text", "ok": true}'
+        result = requirement_parse_json(text)
+        assert result["summary"] == 'Use "quotes" inside text'
+        assert result["ok"] is True
 
 
 class TestComputeQualityScore:
@@ -169,49 +181,53 @@ class TestComputeQualityScore:
         qs = _compute_quality_score({"quality_checks": checks})
         assert qs["completeness"] == 40
 
-    def test_clarity_positive_bonus(self):
+    def test_clarity_two_positives_all_negatives_pass(self):
+        # 2 positive true + all 4 negative pass (empty lists) = 6 × 12.5 = 75
         checks = {
             **ALL_FALSE_CHECKS,
             "clarity_positive": {
-                "has_concrete_examples": True,   # +15
-                "terms_defined": True,            # +15
+                "has_concrete_examples": True,
+                "terms_defined": True,
                 "logical_flow": False,
                 "specific_acceptance_criteria": False,
             },
             "clarity_issues": {k: [] for k in ALL_FALSE_CHECKS["clarity_issues"]},
         }
         qs = _compute_quality_score({"quality_checks": checks})
-        assert qs["ambiguity"] == 50 + 15 + 15  # base + bonuses
+        assert qs["ambiguity"] == round(6 * 12.5)  # = 75
 
-    def test_clarity_deductions(self):
+    def test_clarity_negative_item_fails_when_issues_found(self):
+        # Any item in the issues list → that negative check fails
         checks = {
             **ALL_FALSE_CHECKS,
             "clarity_positive": {k: False for k in ALL_TRUE_CHECKS["clarity_positive"]},
             "clarity_issues": {
-                "vague_words": ["fast", "good"],  # 2 × 15 = 30
-                "undefined_terms": ["API"],       # 1 × 10 = 10
-                "conflicting_statements": [],
-                "implicit_assumptions": [],
+                "vague_words": ["fast", "good"],  # no_vague_words = False
+                "undefined_terms": ["SLA"],        # no_undefined_terms = False
+                "conflicting_statements": [],       # no_conflicting_statements = True
+                "implicit_assumptions": [],         # no_implicit_assumptions = True
             },
         }
         qs = _compute_quality_score({"quality_checks": checks})
-        assert qs["ambiguity"] == max(0, 50 - 30 - 10)  # = 10
+        assert qs["ambiguity"] == round(2 * 12.5)  # 2 negative pass = 25
 
-    def test_clarity_clamped_at_zero(self):
+    def test_clarity_all_fail_gives_zero(self):
+        # All 4 positive False + all 4 negative fail (issues present) → 0
         checks = {
             **ALL_FALSE_CHECKS,
+            "clarity_positive": {k: False for k in ALL_TRUE_CHECKS["clarity_positive"]},
             "clarity_issues": {
-                "vague_words": ["a", "b", "c", "d", "e"],  # 5 × 15 = 75
-                "undefined_terms": ["x"],                    # 1 × 10 = 10
-                "conflicting_statements": [],
-                "implicit_assumptions": [],
+                "vague_words": ["a", "b"],
+                "undefined_terms": ["X"],
+                "conflicting_statements": ["c1"],
+                "implicit_assumptions": ["i1"],
             },
         }
         qs = _compute_quality_score({"quality_checks": checks})
-        assert qs["ambiguity"] == 0  # 50 - 85 = -35 → clamped to 0
+        assert qs["ambiguity"] == 0
 
     def test_overall_formula(self):
-        # completeness=100, testability=0, ambiguity=0
+        # completeness=100, testability=0, all positive False + all issues empty → ambiguity=50
         checks = {
             "completeness": ALL_TRUE_CHECKS["completeness"],
             "testability": ALL_FALSE_CHECKS["testability"],
@@ -219,7 +235,9 @@ class TestComputeQualityScore:
             "clarity_issues": {k: [] for k in ALL_FALSE_CHECKS["clarity_issues"]},
         }
         qs = _compute_quality_score({"quality_checks": checks})
-        # overall = 100*0.40 + 0*0.35 + 50*0.25 = 40 + 0 + 12.5 → round = 53
+        # ambiguity = 4 negative pass × 12.5 = 50
+        # overall = 100*0.40 + 0*0.35 + 50*0.25 = 53
+        assert qs["ambiguity"] == 50
         assert qs["overall"] == round(100 * 0.40 + 0 * 0.35 + 50 * 0.25)
 
     def test_risk_thresholds(self):
@@ -248,7 +266,10 @@ class TestComputeQualityScore:
         assert qs["risk"] in {"High", "Medium", "Low"}
 
     def test_missing_quality_checks_key(self):
+        # No data → all positive False, all issues missing → treated as empty → 4 negative pass
+        # ambiguity = 4 × 12.5 = 50
         qs = _compute_quality_score({})
+        assert qs["ambiguity"] == 50
         assert qs["overall"] == round(0 * 0.40 + 0 * 0.35 + 50 * 0.25)
 
     def test_score_breakdown_keys_present(self):
@@ -259,9 +280,103 @@ class TestComputeQualityScore:
         assert "completeness_missing" in bd
         assert "testability_found" in bd
         assert "testability_missing" in bd
-        assert "ambiguity_deductions" in bd
         assert "clarity_found" in bd
         assert "clarity_missing" in bd
+        assert "ambiguity_deductions" not in bd
+
+    # ── Clarity binary behaviour ─────────────────────────────────────────────
+
+    def test_clarity_one_issue_same_as_many(self):
+        """Binary: 1 vague word or 100 — both fail the no_vague_words check."""
+        def _amb(n):
+            checks = {
+                **ALL_FALSE_CHECKS,
+                "clarity_positive": {k: False for k in ALL_TRUE_CHECKS["clarity_positive"]},
+                "clarity_issues": {
+                    "vague_words": [f"w{i}" for i in range(n)],
+                    "undefined_terms": [], "conflicting_statements": [], "implicit_assumptions": [],
+                },
+            }
+            return _compute_quality_score({"quality_checks": checks})["ambiguity"]
+
+        # 0 items → no_vague_words passes (+12.5), others also pass → 4×12.5=50
+        assert _amb(0) == round(4 * 12.5)
+        # ≥1 item → no_vague_words fails → 3×12.5=37 (rounded)
+        assert _amb(1) == round(3 * 12.5)
+        assert _amb(1) == _amb(10) == _amb(100)
+
+    def test_clarity_each_category_independent(self):
+        """Failing two negative categories is independent of each other."""
+        checks = {
+            **ALL_FALSE_CHECKS,
+            "clarity_positive": {k: False for k in ALL_TRUE_CHECKS["clarity_positive"]},
+            "clarity_issues": {
+                "vague_words":            ["v1"],  # no_vague_words = False
+                "undefined_terms":        ["t1"],  # no_undefined_terms = False
+                "conflicting_statements": [],       # no_conflicting_statements = True
+                "implicit_assumptions":   [],       # no_implicit_assumptions = True
+            },
+        }
+        qs = _compute_quality_score({"quality_checks": checks})
+        assert qs["ambiguity"] == round(2 * 12.5)  # 2 negative pass = 25
+
+    def test_non_list_clarity_issues_treated_as_empty(self):
+        """Non-list values in clarity_issues are treated as empty (no issues → pass)."""
+        checks = {
+            **ALL_FALSE_CHECKS,
+            "clarity_positive": {k: False for k in ALL_TRUE_CHECKS["clarity_positive"]},
+            "clarity_issues": {
+                "vague_words":            "fast",   # string — treated as empty → pass
+                "undefined_terms":        None,      # None — treated as empty → pass
+                "conflicting_statements": {},        # dict — treated as empty → pass
+                "implicit_assumptions":   [],        # empty → pass
+            },
+        }
+        qs = _compute_quality_score({"quality_checks": checks})
+        # All 4 negative pass, all 4 positive false → 4×12.5=50
+        assert qs["ambiguity"] == round(4 * 12.5)
+
+    def test_clarity_missing_shown_in_breakdown(self):
+        """clarity_missing includes the label for any failing negative check."""
+        checks = {
+            **ALL_FALSE_CHECKS,
+            "clarity_issues": {
+                "vague_words": ["fast"],
+                "undefined_terms": [], "conflicting_statements": [], "implicit_assumptions": [],
+            },
+        }
+        qs = _compute_quality_score({"quality_checks": checks})
+        missing = qs["score_breakdown"]["clarity_missing"]
+        assert any("vague" in m.lower() for m in missing)
+
+    def test_score_stability_across_vague_word_counts(self):
+        """Overall score swing is ≤5 pts regardless of how many vague words LLM reports."""
+        def _overall(n_vague):
+            checks = {
+                "completeness": {
+                    "inputs_defined": True, "validation_rules": True,
+                    "success_response": True, "error_cases": False,
+                    "business_rules": True,  "auth_stated": False,
+                },
+                "testability": {
+                    "acceptance_criteria": True, "expected_outputs": True,
+                    "test_data_derivable": False, "rules_verifiable": True,
+                    "no_vague_language": False,
+                },
+                "clarity_positive": {
+                    "has_concrete_examples": False, "terms_defined": True,
+                    "logical_flow": True, "specific_acceptance_criteria": False,
+                },
+                "clarity_issues": {
+                    "vague_words": [f"w{i}" for i in range(n_vague)],
+                    "undefined_terms": [], "conflicting_statements": [],
+                    "implicit_assumptions": [],
+                },
+            }
+            return _compute_quality_score({"quality_checks": checks})["overall"]
+
+        assert _overall(4) == _overall(10)
+        assert abs(_overall(0) - _overall(10)) <= 5
 
 
 # ── make_fallback_tc ──────────────────────────────────────────────────────────
@@ -331,3 +446,16 @@ class TestParseSeparator:
         result = _parse_separator("{}", "pytest")
         # Falls back to JSON parse — no generated_files in empty JSON
         assert result.get("generated_files", []) == []
+
+    def test_parse_separator_fallback_handles_json_like(self):
+        text = "{generated_files: [{file_name: 'tests/test.py', code: 'print(1)', explanation: ''}]}"
+        result = _parse_separator(text, "pytest")
+        assert result["framework"] == "pytest"
+        assert len(result["generated_files"]) == 1
+        assert result["generated_files"][0]["file_name"] == "tests/test.py"
+
+    def test_parse_separator_handles_single_quotes(self):
+        text = "{\"generated_files\": [{\"file_name\": 'tests/test.py', \"code\": 'print(1)', \"explanation\": ''}]}"
+        result = _parse_separator(text, "pytest")
+        assert len(result["generated_files"]) == 1
+        assert result["generated_files"][0]["code"] == "print(1)"

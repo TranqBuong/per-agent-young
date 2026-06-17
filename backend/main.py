@@ -1,12 +1,18 @@
+import hashlib
 import io
+import json
+import os
+import re
 import time
 import logging
 import urllib.request
 import urllib.error
+from typing import List
 from fastapi import FastAPI, HTTPException, Request, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.exceptions import ResponseValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 from pathlib import Path
@@ -14,6 +20,7 @@ from backend.app.workflows.mvp_workflow import MVPWorkflow
 from backend.app.workflows.test_case_payload_workflow import TestCasePayloadWorkflow
 from backend.app.workflows.automation_code_workflow import AutomationCodeWorkflow
 from backend.app.workflows.full_pipeline_workflow import FullPipelineWorkflow
+from pydantic import BaseModel
 from backend.app.schemas.agent_schemas import (
     RequirementInput,
     GenerateTestCasesInput,
@@ -31,6 +38,21 @@ app = FastAPI(
 
 
 _logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Endpoint '{request.url.path}' not found. Visit /docs for the list of available endpoints."},
+        )
+    if exc.status_code == 405:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": f"Method '{request.method}' is not allowed on '{request.url.path}'. Check /docs for the correct HTTP method."},
+        )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 @app.exception_handler(ResponseValidationError)
@@ -231,7 +253,14 @@ def generate_automation_code(payload: GenerateAutomationCodeInput):
     t0 = time.time()
     req_text = payload.requirement_text or ""
     framework = payload.framework or "pytest"
-    cache_key = f"{req_text}|{framework}" if req_text else None
+    serialized_test_cases = [
+        tc.model_dump() if hasattr(tc, "model_dump") else tc
+        for tc in payload.test_cases
+    ]
+    tc_hash = hashlib.md5(
+        json.dumps(serialized_test_cases, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:8]
+    cache_key = f"{req_text}|{framework}|{tc_hash}" if req_text else None
     if cache_key:
         cached = cache.get("autocode", cache_key)
         if cached:
@@ -250,6 +279,7 @@ def generate_automation_code(payload: GenerateAutomationCodeInput):
         return _timed(data, time.time() - t0)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent 3 failed: {e}")
+
 
 
 @app.post("/run-full-pipeline")

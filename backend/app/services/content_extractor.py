@@ -2,7 +2,7 @@ import json
 import os
 import re
 import yaml
-from groq import Groq
+from openai import OpenAI
 from backend.app.services.groq_retry import call_with_backoff
 
 _client = None
@@ -44,16 +44,20 @@ def _strip_html(text: str) -> str:
     return text.strip()
 
 
-def _get_client() -> Groq:
+def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = os.environ.get("GREENNODE_AIP_KEY")
         if not api_key:
             raise RuntimeError(
-                "GROQ_API_KEY environment variable is not set. "
-                "Export it before starting the server: export GROQ_API_KEY=<your-key>"
+                "GREENNODE_AIP_KEY environment variable is not set. "
+                "Export it before starting the server: export GREENNODE_AIP_KEY=<your-key>"
             )
-        _client = Groq(api_key=api_key)
+        _client = OpenAI(
+            api_key=api_key,
+            base_url=os.environ.get("GREENNODE_AIP_BASE_URL",
+                                    "https://maas-llm-aiplatform-hcm.api.vngcloud.vn/v1"),
+        )
     return _client
 
 
@@ -225,7 +229,7 @@ def extract_requirements(raw_text: str, source_hint: str = "") -> str:
 
     def _once():
         completion = client.chat.completions.create(
-            model=os.environ.get("GROQ_MODEL_LIGHT", "llama-3.1-8b-instant"),
+            model=os.environ.get("GREENNODE_MODEL_LIGHT", "deepseek/deepseek-v4-flash"),
             max_tokens=2000,
             temperature=0,
             seed=42,

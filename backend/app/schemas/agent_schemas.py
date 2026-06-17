@@ -181,7 +181,8 @@ class TestCaseItem(BaseModel):
         if v is None:
             return {}
         if isinstance(v, list):
-            return {str(i): item for i, item in enumerate(v)}
+            # A bare list has no field names — discard rather than produce {"0": ...} noise
+            return {}
         if not isinstance(v, dict):
             return {"value": str(v)}
         return v

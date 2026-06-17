@@ -6,7 +6,7 @@
   <title>Multi-Agent Quality Engineer</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -401,8 +401,8 @@
       background: rgba(248,113,113,.07);
       border: 1px solid rgba(248,113,113,.25);
       border-radius: var(--r);
-      padding: 14px 18px;
-      color: var(--rose); font-size: .875rem;
+      padding: 10px 14px;
+      color: var(--rose); font-size: .78rem;
       gap: 12px; align-items: flex-start;
     }
     .err-box.show { display: flex; animation: fadeIn .3s ease; }
@@ -620,6 +620,32 @@
     }
     .s-cancel-edit-btn:hover { color: var(--text); border-color: var(--dim); }
 
+    /* ── TC edit / add ── */
+    .add-tc-toggle { display:block; width:100%; padding:12px 18px; border-radius:var(--r); border:1px dashed rgba(56,189,248,.4); background:transparent; color:var(--blue); font:inherit; font-size:.84rem; cursor:pointer; transition:all var(--t); margin-bottom:12px; text-align:center; box-sizing:border-box; }
+    .add-tc-toggle:hover { background:rgba(56,189,248,.06); border-style:solid; }
+    .add-tc-form-wrap { background:var(--surface); border:1px solid rgba(56,189,248,.25); border-radius:var(--r); padding:20px; margin-bottom:14px; animation:fadeIn .2s ease; }
+    .add-tc-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+    .add-tc-full { grid-column:1/-1; }
+    .add-tc-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:block; margin-bottom:4px; }
+    .add-tc-input { width:100%; padding:7px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg2); color:var(--text); font:inherit; font-size:.83rem; box-sizing:border-box; }
+    .add-tc-input:focus { outline:none; border-color:rgba(56,189,248,.5); }
+    .add-tc-actions { display:flex; gap:8px; margin-top:4px; }
+    .btn-add-tc { padding:7px 20px; border-radius:999px; background:var(--blue); color:#fff; border:none; font:inherit; font-size:.83rem; font-weight:600; cursor:pointer; }
+    .btn-cancel-tc { padding:7px 16px; border-radius:999px; background:transparent; color:var(--muted); border:1px solid var(--dim); font:inherit; font-size:.83rem; cursor:pointer; }
+    .tc-edit-btn { padding:3px 10px; border-radius:5px; border:1px solid rgba(56,189,248,.3); background:transparent; color:var(--blue); font:inherit; font-size:.72rem; cursor:pointer; transition:all var(--t); }
+    .tc-edit-btn:hover { background:rgba(56,189,248,.1); }
+    .tc-del-btn { padding:3px 10px; border-radius:5px; border:1px solid rgba(239,68,68,.25); background:transparent; color:#ef4444; font:inherit; font-size:.72rem; cursor:pointer; transition:all var(--t); }
+    .tc-del-btn:hover { background:rgba(239,68,68,.08); }
+    .tc-edit-form { border-top:1px solid var(--border); padding:18px; background:rgba(56,189,248,.02); }
+    .tc-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+    .tc-edit-full { grid-column:1/-1; }
+    .tc-edit-label { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:block; margin-bottom:3px; }
+    .tc-edit-input { width:100%; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg2); color:var(--text); font:inherit; font-size:.82rem; box-sizing:border-box; }
+    .tc-edit-input:focus { outline:none; border-color:rgba(56,189,248,.5); }
+    .tc-edit-actions { display:flex; gap:8px; margin-top:4px; }
+    .tc-save-btn { padding:5px 16px; border-radius:7px; background:var(--blue); color:#fff; border:none; font:inherit; font-size:.81rem; font-weight:600; cursor:pointer; }
+    .tc-cancel-btn { padding:5px 14px; border-radius:7px; background:transparent; color:var(--muted); border:1px solid var(--dim); font:inherit; font-size:.81rem; cursor:pointer; }
+
     /* ── Test case cards ── */
     .tc {
       background: var(--surface); border: 1px solid var(--border);
@@ -823,9 +849,9 @@
     .qs-row-val { font-size: .82rem; font-weight: 700; width: 38px; text-align: right; flex-shrink: 0; }
     .qs-evidence { list-style: none; padding: 0 0 0 114px; margin: 0; display: grid; gap: 2px; }
     .qs-evidence li { font-size: .73rem; line-height: 1.4; }
-    .ev-found     { color: #34d399; }
-    .ev-missing   { color: #f87171; }
-    .ev-deduction { color: #fbbf24; }
+    .ev-found     { font-size:.73rem; line-height:1.5; color: #34d399; }
+    .ev-missing   { font-size:.73rem; line-height:1.5; color: #f87171; }
+    .ev-deduction { font-size:.73rem; line-height:1.5; color: #fbbf24; }
     .qs-formula { font-size: .72rem; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-family: monospace; letter-spacing: .01em; }
     .badge.edge-case { background: rgba(168,85,247,.15); color: #c084fc; border-color: rgba(168,85,247,.35); }
     .missing-info-panel { background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.25); border-radius: var(--r); padding: 14px 18px; margin-bottom: 14px; }
@@ -891,6 +917,15 @@
     .rtm-table td.tc-cell   { color: var(--green);  font-family: monospace; font-size: .74rem; white-space: nowrap; }
     .rtm-table td.title-cell { max-width: 220px; font-size: .82rem; }
     .rtm-no-tc { color: var(--rose); font-size: .74rem; font-style: italic; }
+    .rtm-status-sel { padding:3px 7px; border-radius:5px; border:1px solid var(--border); background:var(--surface2); color:inherit; font:inherit; font-size:.74rem; cursor:pointer; min-width:96px; }
+    .rtm-status-sel[data-v="Passed"]     { border-color:rgba(52,211,153,.5); color:var(--green); }
+    .rtm-status-sel[data-v="Failed"]     { border-color:rgba(251,113,133,.5); color:var(--rose); }
+    .rtm-status-sel[data-v="In Progress"]{ border-color:rgba(251,191,36,.5);  color:var(--amber); }
+    .rtm-status-sel[data-v="Block"]      { border-color:rgba(248,113,113,.5); color:#f87171; }
+    .rtm-status-sel[data-v="Skipped"]    { border-color:rgba(148,163,184,.4); color:var(--muted); }
+    .rtm-note-ta { width:100%; min-width:160px; min-height:34px; resize:vertical; padding:4px 7px; border-radius:5px; border:1px solid transparent; background:transparent; color:inherit; font:inherit; font-size:.78rem; line-height:1.4; transition:border-color .15s,background .15s; box-sizing:border-box; }
+    .rtm-note-ta:focus { outline:none; border-color:var(--border); background:var(--surface2); }
+    .rtm-note-ta::placeholder { color:var(--muted); opacity:.6; }
     .rtm-coverage {
       display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
       padding: 14px 18px; margin-bottom: 16px;
@@ -938,7 +973,7 @@
 
   <!-- Hero -->
   <section class="hero">
-    <h2>Test Pilot</h2>
+    <h2>QE Agent</h2>
   </section>
 
   <!-- Pipeline (horizontal) -->
@@ -1062,9 +1097,9 @@
           <div id="sugList"></div>
         </div>
 
-        <div class="confirm-bar">
-          <p>Looks good? Click <strong>Confirm</strong> to analyze and view scenarios.</p>
-          <button onclick="editRequirement()" style="padding:10px 18px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--dim);font:inherit;font-size:.82rem;cursor:pointer;margin-right:8px" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--dim)'">✏️ Edit Req</button>
+        <div id="confirmBarNormal" class="confirm-bar">
+          <p id="confirmBarMsg">Looks good? Click <strong>Confirm</strong> to analyze and view scenarios.</p>
+          <button onclick="editRequirement()" style="padding:10px 32px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--dim);font:inherit;font-size:.82rem;cursor:pointer;margin-right:8px" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--dim)'">✏️ Edit Req</button>
           <button class="confirm-btn" id="confirmBtn" onclick="confirm_()">
             <span class="spinner" id="confirmSpinner" style="display:none;width:14px;height:14px;border-width:2px"></span>
             <span id="confirmBtnText">✓ Confirm & Analyze Scenarios</span>
@@ -1184,6 +1219,59 @@
         <div class="tab-panel" id="tab-testcases">
           <div id="tc-filter-bar"></div>
           <div id="tgrid"></div>
+          <!-- Add Test Case -->
+          <div id="addTCSection" style="display:none">
+            <button class="add-tc-toggle" onclick="toggleAddTCForm()">＋ Add Test Case</button>
+            <div class="add-tc-form-wrap" id="addTCForm" style="display:none">
+              <h4 style="font-size:.88rem;font-weight:700;margin-bottom:14px">Add Custom Test Case</h4>
+              <div class="add-tc-grid">
+                <div class="add-tc-full">
+                  <label class="add-tc-label">Name *</label>
+                  <input class="add-tc-input" id="tcName" placeholder="e.g. Valid transfer with sufficient balance">
+                </div>
+                <div>
+                  <label class="add-tc-label">Linked Scenario</label>
+                  <select class="add-tc-input" id="tcScenarioId">
+                    <option value="">— Select Scenario —</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="add-tc-label">Priority</label>
+                  <select class="add-tc-input" id="tcPriority">
+                    <option value="high">High</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="add-tc-label">Type</label>
+                  <select class="add-tc-input" id="tcType">
+                    <option value="positive">Positive</option>
+                    <option value="negative">Negative</option>
+                    <option value="boundary">Boundary</option>
+                    <option value="security">Security</option>
+                    <option value="edge_case">Edge Case</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="add-tc-label">Preconditions</label>
+                  <input class="add-tc-input" id="tcPreconditions" placeholder="e.g. User is authenticated, wallet has balance ≥ 1000 VND">
+                </div>
+                <div class="add-tc-full">
+                  <label class="add-tc-label">Steps (one per line)</label>
+                  <textarea class="add-tc-input" id="tcSteps" rows="3" placeholder="1. Open transfer screen&#10;2. Enter amount 50000&#10;3. Tap Confirm"></textarea>
+                </div>
+                <div class="add-tc-full">
+                  <label class="add-tc-label">Expected Result *</label>
+                  <input class="add-tc-input" id="tcExpected" placeholder="e.g. 200 OK, transaction_id returned, balance deducted">
+                </div>
+              </div>
+              <div class="add-tc-actions" style="justify-content:flex-end">
+                <button class="btn-cancel-tc" onclick="toggleAddTCForm()">Cancel</button>
+                <button class="btn-add-tc" onclick="submitAddTC()">＋ Add Test Case</button>
+              </div>
+            </div>
+          </div>
           <div id="pager-tc"></div>
         </div>
         <div class="tab-panel" id="tab-rtm"><div id="rtm-panel"></div><div id="pager-rtm"></div></div>
@@ -1258,6 +1346,14 @@ function resetAgents() {
   [1,2,3].forEach(n => agent(n,'','Waiting'));
 }
 
+function _syncTCCount() {
+  const n = _currentTestCases.length;
+  const tc2 = document.getElementById('tc2');
+  if (tc2) tc2.textContent = n;
+  const mv2 = document.getElementById('mv2');
+  if (mv2) mv2.textContent = n;
+}
+
 function countUp(el, to, ms=700) {
   const t0 = performance.now();
   const tick = t => {
@@ -1268,11 +1364,24 @@ function countUp(el, to, ms=700) {
   requestAnimationFrame(tick);
 }
 
+function _syncScenarioDropdown() {
+  const sel = document.getElementById('tcScenarioId');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— Select Scenario —</option>' +
+    _currentScenarios.map(s =>
+      `<option value="${e(s.scenario_id)}">${e(s.scenario_id)}${s.title ? ' — ' + e(s.title.slice(0,50)) : ''}</option>`
+    ).join('');
+  if (prev && _currentScenarios.some(s => s.scenario_id === prev)) sel.value = prev;
+}
+
 function tab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'rtm')  renderRTM(_currentScenarios, _currentTestCases, _currentReqSummary);
+  if (name === 'code') renderCode(_currentFiles, _currentFramework);
 }
 
 function e(s) {
@@ -1310,7 +1419,7 @@ function renderScenarios(list) {
             ${s.related_endpoint ? bdg(e(s.related_endpoint),'ep') : ''}
           </div>
           <button class="s-edit-btn" onclick="toggleScenarioEdit('${sid}')" title="Edit">✏ Edit</button>
-          ${isManual ? `<button class="s-del-btn" onclick="deleteScenario('${sid}')" title="Remove">✕</button>` : ''}
+          ${isManual && !_currentTestCases.length ? `<button class="s-del-btn" onclick="deleteScenario('${sid}')" title="Remove">✕</button>` : ''}
         </div>
       </div>
       <div class="bdd" id="sbdd-${sid}">
@@ -1360,6 +1469,24 @@ const TECHNIQUE_NAMES = {
   RG:  'Regression Testing (RG)',
 };
 
+const TECHNIQUE_DESC = {
+  EP:  'Divide inputs into equivalence classes and test one representative per class.',
+  BVA: 'Test at and just beyond boundary values where defects most often occur.',
+  DT:  'Cover all meaningful condition combinations and their expected actions.',
+  ST:  'Verify every state transition is triggered correctly and invalid ones are rejected.',
+  UC:  'Walk through end-to-end user flows to confirm intended use cases work.',
+  PT:  'Cover every pair of parameter values with the smallest set of test cases.',
+  EG:  'Use experience and intuition to target the most error-prone areas.',
+  FA:  'Check whether AI/ML outputs are functionally correct per specification.',
+  RT:  'Test system behaviour under malformed or adversarial inputs.',
+  CT:  'Verify the system gives consistent outputs for equivalent or repeated inputs.',
+  HD:  'Detect fabricated or unsupported claims in AI-generated content.',
+  BF:  'Identify bias or unfair treatment across different input groups.',
+  OV:  'Validate outputs conform to expected structure, format, and value constraints.',
+  BP:  'Probe AI/ML capability limits with edge-case and out-of-distribution inputs.',
+  RG:  'Confirm existing functionality still works correctly after changes.',
+};
+
 function techName(t) { return TECHNIQUE_NAMES[t] || t; }
 
 function techBadge(t) {
@@ -1382,7 +1509,7 @@ function renderTechniques(techniques, systemType) {
     return `<div style="display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:start;padding:10px 0;border-bottom:1px solid var(--border)">
       <span style="padding:3px 10px;border-radius:5px;font-size:.7rem;font-weight:700;text-align:center;background:${c}22;color:${c};border:1px solid ${c}44;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e(techName(t.technique))}</span>
       <div>
-        <div style="font-size:.78rem;color:var(--dim);line-height:1.5">${e(t.rationale)}</div>
+        <div style="font-size:.78rem;color:var(--dim);line-height:1.5">${e(TECHNIQUE_DESC[t.technique] || t.rationale || '')}</div>
         ${scnBadges ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${scnBadges}</div>` : ''}
       </div>
     </div>`;
@@ -1444,38 +1571,82 @@ function renderTestCases(list, techniques, systemType) {
   _pageTC = Math.max(1, Math.min(_pageTC, totalPagesTC));
   const pageTC = filtered.slice((_pageTC - 1) * PAGE_SIZE, _pageTC * PAGE_SIZE);
 
-  const tcHtml = pageTC.map((tc,i) => `
+  const tcHtml = pageTC.map((tc,i) => {
+    const tid = tc.test_case_id || ('TC-M-' + i);
+    const isManual = _manualTestCaseIds.has(tid);
+    const stepsVal = (tc.steps||[]).join('\n');
+    return `
     <div class="tc" id="tcase${i}">
       <div class="tc-head" onclick="toggle(${i})">
         <div class="tc-left">
           <span class="tc-cid">${e(tc.test_case_id)}</span>
           <span class="tc-name">${e(tc.name)}</span>
         </div>
-        <div class="badges">
+        <div class="badges" style="gap:6px">
           ${techBadge(tc.technique || 'UC')}
           ${bdg(tc.priority || 'medium', PRI_CLASS[tc.priority]||'medium')}
           ${(() => { const tag = (tc.tags||[])[0] || 'positive'; return `<span class="tag">${e(tag)}</span>`; })()}
+          <button class="tc-edit-btn" onclick="event.stopPropagation();toggleTCEdit('${tid}')">✏ Edit</button>
+          ${isManual ? `<button class="tc-del-btn" onclick="event.stopPropagation();deleteTC('${tid}')">✕</button>` : ''}
           <span class="chev">▼</span>
         </div>
       </div>
       <div class="tc-body">
-        ${tc.scenario_id ? `<div class="sect"><div class="sect-lbl">Linked Scenario</div><span style="font-size:.78rem;font-family:monospace;color:var(--indigo)">${e(tc.scenario_id)}</span></div>` : ''}
-        <div class="sect">
-          <div class="sect-lbl">Preconditions</div>
-          <div style="font-size:.85rem;color:var(--dim)">${e(tc.preconditions)}</div>
+        <div id="tcview-${tid}">
+          ${tc.scenario_id ? `<div class="sect"><div class="sect-lbl">Linked Scenario</div><span style="font-size:.78rem;font-family:monospace;color:var(--indigo)">${e(tc.scenario_id)}</span></div>` : ''}
+          <div class="sect">
+            <div class="sect-lbl">Preconditions</div>
+            <div style="font-size:.85rem;color:var(--dim)">${e(tc.preconditions)}</div>
+          </div>
+          <div class="sect">
+            <div class="sect-lbl">Steps</div>
+            <ul class="steps">${(tc.steps||[]).map(s=>`<li>${e(s)}</li>`).join('')}</ul>
+          </div>
+          <div class="sect">
+            <div class="sect-lbl">Expected Result</div>
+            <div class="expected">${e(tc.expected_result)}</div>
+          </div>
+          ${tc.test_data ? `<div class="sect"><div class="sect-lbl">Test Data</div><div class="data-block">${e(JSON.stringify(tc.test_data,null,2))}</div></div>` : ''}
         </div>
-        <div class="sect">
-          <div class="sect-lbl">Steps</div>
-          <ul class="steps">${(tc.steps||[]).map(s=>`<li>${e(s)}</li>`).join('')}</ul>
+        <div class="tc-edit-form" id="tcedit-${tid}" style="display:none">
+          <div class="tc-edit-grid">
+            <div class="tc-edit-full">
+              <label class="tc-edit-label">Name</label>
+              <input class="tc-edit-input" id="tce-name-${tid}" value="${e(tc.name||'')}">
+            </div>
+            <div>
+              <label class="tc-edit-label">Priority</label>
+              <select class="tc-edit-input" id="tce-pri-${tid}">
+                ${['high','medium','low'].map(p=>`<option value="${p}"${tc.priority===p?' selected':''}>${p}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="tc-edit-label">Type</label>
+              <select class="tc-edit-input" id="tce-type-${tid}">
+                ${['positive','negative','boundary','security','edge_case'].map(t=>`<option value="${t}"${(tc.tags||[])[0]===t?' selected':''}>${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="tc-edit-full">
+              <label class="tc-edit-label">Preconditions</label>
+              <input class="tc-edit-input" id="tce-pre-${tid}" value="${e(tc.preconditions||'')}">
+            </div>
+            <div class="tc-edit-full">
+              <label class="tc-edit-label">Steps (one per line)</label>
+              <textarea class="tc-edit-input" id="tce-steps-${tid}" rows="4">${e(stepsVal)}</textarea>
+            </div>
+            <div class="tc-edit-full">
+              <label class="tc-edit-label">Expected Result</label>
+              <input class="tc-edit-input" id="tce-expected-${tid}" value="${e(tc.expected_result||'')}">
+            </div>
+          </div>
+          <div class="tc-edit-actions">
+            <button class="tc-save-btn" onclick="saveTCEdit('${tid}')">Save</button>
+            <button class="tc-cancel-btn" onclick="toggleTCEdit('${tid}')">Cancel</button>
+          </div>
         </div>
-        <div class="sect">
-          <div class="sect-lbl">Expected Result</div>
-          <div class="expected">${e(tc.expected_result)}</div>
-        </div>
-        ${tc.test_data ? `<div class="sect"><div class="sect-lbl">Test Data</div><div class="data-block">${e(JSON.stringify(tc.test_data,null,2))}</div></div>` : ''}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   const noResultsHtml = filtered.length === 0 && list.length > 0
     ? `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:.85rem">No test cases match the current filter.</div>` : '';
@@ -1638,11 +1809,15 @@ function renderRTM(scenarios, testCases, reqSummary) {
         <td class="title-cell">${e(sc.title)}</td>
         <td>${bdg(sc.type, TYPE_CLASS[sc.type]||'positive')}</td>
         <td>${bdg(sc.priority, PRI_CLASS[sc.priority]||'medium')}</td>
-        <td colspan="3"><span class="rtm-no-tc">No test case linked</span></td>
+        <td colspan="4"><span class="rtm-no-tc">No test case linked</span></td>
       </tr>`;
     } else {
       for (let i = 0; i < tcs.length; i++) {
         const tc = tcs[i];
+        const tcSt = _rtmStatus[tc.test_case_id] || '';
+        const tcNote = (_rtmNotes[tc.test_case_id] || '').replace(/"/g, '&quot;');
+        const statusOpts = ['', 'Passed', 'Failed', 'In Progress', 'Block', 'Skipped']
+          .map(v => `<option value="${v}"${tcSt===v?' selected':''}>${v||'—'}</option>`).join('');
         rows += `<tr${i === 0 ? ' class="rtm-grp-start"' : ''}>
           ${i === 0 ? `
             <td class="req-cell" rowspan="${span}">${e(reqId) || '<span style="color:var(--muted)">—</span>'}</td>
@@ -1654,14 +1829,39 @@ function renderRTM(scenarios, testCases, reqSummary) {
           ` : ''}
           <td class="tc-cell">${e(tc.test_case_id)}</td>
           <td class="title-cell">${e(tc.name)}</td>
-          <td>${techBadge(tc.technique)}</td>
+          <td><select class="rtm-status-sel" data-v="${tcSt}" onchange="setRTMStatus('${tc.test_case_id}',this.value);this.dataset.v=this.value">${statusOpts}</select></td>
+          <td style="padding:4px 6px"><textarea class="rtm-note-ta" placeholder="Add note…" oninput="setRTMNote('${tc.test_case_id}',this.value)">${tcNote}</textarea></td>
         </tr>`;
       }
     }
   }
 
+  // Unlinked TCs: scenario_id is null/empty or doesn't match any scenario
+  const linkedScnIds = new Set(scenarios.map(s => s.scenario_id));
+  const unlinkedTCs = testCases.filter(tc => !tc.scenario_id || !linkedScnIds.has(tc.scenario_id));
+  if (unlinkedTCs.length > 0) {
+    rows += `<tr class="rtm-grp-start"><td colspan="10" style="padding:10px 12px;font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;background:rgba(255,255,255,.02)">Unlinked Test Cases</td></tr>`;
+    for (const tc of unlinkedTCs) {
+      const tcSt = _rtmStatus[tc.test_case_id] || '';
+      const tcNote = (_rtmNotes[tc.test_case_id] || '').replace(/"/g, '&quot;');
+      const statusOpts = ['', 'Passed', 'Failed', 'In Progress', 'Block', 'Skipped']
+        .map(v => `<option value="${v}"${tcSt===v?' selected':''}>${v||'—'}</option>`).join('');
+      rows += `<tr>
+        <td colspan="6" style="color:var(--muted);font-size:.78rem;font-style:italic;padding:8px 12px">— not linked to a scenario —</td>
+        <td class="tc-cell">${e(tc.test_case_id)}</td>
+        <td class="title-cell">${e(tc.name)}</td>
+        <td><select class="rtm-status-sel" data-v="${tcSt}" onchange="setRTMStatus('${tc.test_case_id}',this.value);this.dataset.v=this.value">${statusOpts}</select></td>
+        <td style="padding:4px 6px"><textarea class="rtm-note-ta" placeholder="Add note…" oninput="setRTMNote('${tc.test_case_id}',this.value)">${tcNote}</textarea></td>
+      </tr>`;
+    }
+  }
+
   document.getElementById('pager-rtm').innerHTML = _pager(_pageRTM, totalPagesRTM, 'rtm');
-  document.getElementById('rtm-panel').innerHTML = covHtml + `<div class="rtm-wrap">
+  const statsHtml = `<div id="rtm-stats-bar" style="padding:12px 16px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.07);border-radius:var(--r);margin-bottom:14px">
+    ${_rtmStatsInner(testCases)}
+  </div>`;
+
+  document.getElementById('rtm-panel').innerHTML = covHtml + statsHtml + `<div class="rtm-wrap">
     <table class="rtm-table">
       <thead>
         <tr>
@@ -1673,7 +1873,8 @@ function renderRTM(scenarios, testCases, reqSummary) {
           <th>Priority</th>
           <th>TC ID</th>
           <th>Test Case</th>
-          <th>Technique</th>
+          <th>Status</th>
+          <th>Notes</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -1681,46 +1882,115 @@ function renderRTM(scenarios, testCases, reqSummary) {
   </div>`;
 }
 
+function _xlBdr(clr) {
+  const s = { style: 'thin', color: { rgb: clr || 'CBD5E1' } };
+  return { top: s, bottom: s, left: s, right: s };
+}
+function _xlCell(v, s) {
+  return { v: v ?? '', t: typeof v === 'number' ? 'n' : 's', s };
+}
+
 function exportRTM() {
   if (!window.XLSX) { alert('Excel library not loaded — please refresh the page.'); return; }
+
+  // ── Styles ──
+  const S = {
+    title:   { font:{bold:true,color:{rgb:'FFFFFF'},sz:14}, fill:{fgColor:{rgb:'0F172A'}}, alignment:{horizontal:'left',vertical:'center'} },
+    sumHdr:  { font:{bold:true,color:{rgb:'FFFFFF'},sz:10}, fill:{fgColor:{rgb:'334155'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr('475569') },
+    sumLbl:  (bg,fg) => ({ font:{bold:true,color:{rgb:fg||'1E293B'},sz:10}, fill:{fgColor:{rgb:bg||'F8FAFC'}}, alignment:{horizontal:'left',vertical:'center'}, border:_xlBdr() }),
+    sumVal:  (bg) => ({ font:{sz:10}, fill:{fgColor:{rgb:bg||'F8FAFC'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr() }),
+    total:   { font:{bold:true,sz:11}, fill:{fgColor:{rgb:'E2E8F0'}}, alignment:{horizontal:'left',vertical:'center'}, border:_xlBdr('CBD5E1') },
+    totalV:  { font:{bold:true,sz:11}, fill:{fgColor:{rgb:'E2E8F0'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr('CBD5E1') },
+    rtmHdr:  { font:{bold:true,color:{rgb:'FFFFFF'},sz:10}, fill:{fgColor:{rgb:'1E293B'}}, alignment:{horizontal:'center',vertical:'center',wrapText:true}, border:_xlBdr('334155') },
+    data:    (even,ctr) => ({ font:{sz:10}, fill:{fgColor:{rgb:even?'FFFFFF':'F1F5F9'}}, alignment:{horizontal:ctr?'center':'left',vertical:'top',wrapText:true}, border:_xlBdr() }),
+    status:  {
+      'Passed':      { font:{bold:true,color:{rgb:'166534'},sz:10}, fill:{fgColor:{rgb:'DCFCE7'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr() },
+      'Failed':      { font:{bold:true,color:{rgb:'991B1B'},sz:10}, fill:{fgColor:{rgb:'FEE2E2'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr() },
+      'In Progress': { font:{bold:true,color:{rgb:'1E40AF'},sz:10}, fill:{fgColor:{rgb:'DBEAFE'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr() },
+      'Block':       { font:{bold:true,color:{rgb:'9A3412'},sz:10}, fill:{fgColor:{rgb:'FFEDD5'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr() },
+      'Skipped':     { font:{bold:true,color:{rgb:'64748B'},sz:10}, fill:{fgColor:{rgb:'F1F5F9'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr() },
+      '':            { font:{sz:10,color:{rgb:'94A3B8'}}, fill:{fgColor:{rgb:'FFFFFF'}}, alignment:{horizontal:'center',vertical:'center'}, border:_xlBdr() },
+    },
+  };
+  const ST_BG = { 'Passed':'DCFCE7','Failed':'FEE2E2','In Progress':'DBEAFE','Block':'FFEDD5','Skipped':'F1F5F9' };
+  const ST_FG = { 'Passed':'166534','Failed':'991B1B','In Progress':'1E40AF','Block':'9A3412','Skipped':'64748B' };
+
+  // ── Summary stats ──
+  const allTCs = _currentTestCases || [];
+  const SK = ['Passed','Failed','In Progress','Block','Skipped'];
+  const sc = {}; SK.forEach(k => { sc[k] = 0; });
+  let sNotSet = 0;
+  allTCs.forEach(tc => { const st = _rtmStatus[tc.test_case_id]||''; sc[st]!==undefined ? sc[st]++ : sNotSet++; });
+  const sTotal = allTCs.length;
+  const sExec  = (sc['Passed']||0)+(sc['Failed']||0)+(sc['Skipped']||0);
+  const sDenom = sTotal-(sc['Skipped']||0);
+  const sExecPct  = sTotal>0 ? Math.round(sExec/sTotal*100) : 0;
+  const sPassRate = sDenom>0 ? Math.round((sc['Passed']||0)/sDenom*100) : 0;
+
+  const NCOLS = 11;
+  const empty = (bg) => _xlCell('', { fill:{fgColor:{rgb:bg||'FFFFFF'}} });
+
+  // ── Build summary rows ──
+  const summaryBlock = [
+    [ _xlCell('Summary', S.title), ...Array(NCOLS-1).fill(empty('0F172A')) ],
+    [ _xlCell('Status', S.sumHdr), _xlCell('Count', S.sumHdr), ...Array(NCOLS-2).fill(empty('334155')) ],
+    ...SK.map(k => [ _xlCell(k, S.sumLbl(ST_BG[k],ST_FG[k])), _xlCell(sc[k], S.sumVal(ST_BG[k])), ...Array(NCOLS-2).fill(empty(ST_BG[k])) ]),
+    [ _xlCell('Not Set', S.sumLbl()), _xlCell(sNotSet, S.sumVal()), ...Array(NCOLS-2).fill(empty('F8FAFC')) ],
+    [ _xlCell('Total', S.total), _xlCell(sTotal, S.totalV), ...Array(NCOLS-2).fill(empty('E2E8F0')) ],
+    [ _xlCell('Executed %', S.sumLbl()), _xlCell(sExecPct+'%', S.sumVal()), ...Array(NCOLS-2).fill(empty('F8FAFC')) ],
+    [ _xlCell('Pass Rate', S.sumLbl()), _xlCell(sPassRate+'%', S.sumVal()), ...Array(NCOLS-2).fill(empty('F8FAFC')) ],
+    Array(NCOLS).fill(empty('FFFFFF')),
+  ];
+  const OFFSET = summaryBlock.length; // RTM header row index
+
+  // ── Build RTM header ──
+  const HDR = ['REQ ID','Requirement','SCN ID','Scenario','Type','Priority','TC ID','Test Case','Expected Result','Status','Notes'];
+  const hdrRow = HDR.map(h => _xlCell(h, S.rtmHdr));
+
+  // ── Build RTM data rows ──
   const reqMap = {};
-  (_currentReqSummary || []).forEach(r => { reqMap[r.id] = r.text || ''; });
-
+  (_currentReqSummary||[]).forEach(r => { reqMap[r.id] = r.text||''; });
   const tcByScn = {};
-  (_currentTestCases || []).forEach(tc => {
-    const sid = tc.scenario_id || '';
-    if (!tcByScn[sid]) tcByScn[sid] = [];
-    tcByScn[sid].push(tc);
-  });
+  (_currentTestCases||[]).forEach(tc => { const sid=tc.scenario_id||''; if(!tcByScn[sid])tcByScn[sid]=[]; tcByScn[sid].push(tc); });
 
-  const header = ['REQ ID', 'Requirement', 'SCN ID', 'Scenario', 'Type', 'Priority', 'TC ID', 'Test Case', 'Technique', 'Expected Result'];
-  const rows = [header];
+  const CTR = new Set([0,2,4,5,6,9]); // REQ ID, SCN ID, Type, Priority, TC ID, Status — center-aligned
+  const dataRows = [];
 
-  (_currentScenarios || []).forEach(scn => {
-    const reqId = scn.related_requirement || '';
-    const reqText = reqMap[reqId] || '';
-    const tcs = tcByScn[scn.scenario_id] || [];
+  (_currentScenarios||[]).forEach(scn => {
+    const reqId = scn.related_requirement||'';
+    const tcs = tcByScn[scn.scenario_id]||[];
+    const vals0 = [reqId, reqMap[reqId]||'', scn.scenario_id, scn.title||'', scn.type||'', scn.priority||'', '','','','',''];
     if (tcs.length === 0) {
-      rows.push([reqId, reqText, scn.scenario_id, scn.title || '', scn.type || '', scn.priority || '', '', '', '', '']);
+      const even = dataRows.length%2===0;
+      dataRows.push(vals0.map((v,i) => _xlCell(v, S.data(even,CTR.has(i)))));
     } else {
       tcs.forEach(tc => {
-        rows.push([reqId, reqText, scn.scenario_id, scn.title || '', scn.type || '', scn.priority || '', tc.test_case_id || '', tc.name || '', tc.technique || '', tc.expected_result || '']);
+        const even = dataRows.length%2===0;
+        const st = _rtmStatus[tc.test_case_id]||'';
+        const vals = [reqId, reqMap[reqId]||'', scn.scenario_id, scn.title||'', scn.type||'', scn.priority||'', tc.test_case_id||'', tc.name||'', tc.expected_result||'', st, _rtmNotes[tc.test_case_id]||''];
+        dataRows.push(vals.map((v,i) => i===9 ? _xlCell(v, S.status[v]||S.status['']) : _xlCell(v, S.data(even,CTR.has(i)))));
       });
     }
   });
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [
-    {wch: 10}, {wch: 40}, {wch: 10}, {wch: 35}, {wch: 12}, {wch: 10},
-    {wch: 12}, {wch: 35}, {wch: 12}, {wch: 40}
-  ];
+  const linkedIds = new Set((_currentScenarios||[]).map(s=>s.scenario_id));
+  (_currentTestCases||[]).filter(tc=>!tc.scenario_id||!linkedIds.has(tc.scenario_id)).forEach(tc => {
+    const even = dataRows.length%2===0;
+    const st = _rtmStatus[tc.test_case_id]||'';
+    const vals = ['','— unlinked —','','','','', tc.test_case_id||'', tc.name||'', tc.expected_result||'', st, _rtmNotes[tc.test_case_id]||''];
+    dataRows.push(vals.map((v,i) => i===9 ? _xlCell(v, S.status[v]||S.status['']) : _xlCell(v, S.data(even,CTR.has(i)))));
+  });
 
-  // Style header row bold
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cell = ws[XLSX.utils.encode_cell({r: 0, c})];
-    if (cell) { cell.s = { font: { bold: true } }; }
-  }
+  const ws = XLSX.utils.aoa_to_sheet([...summaryBlock, hdrRow, ...dataRows]);
+  ws['!cols'] = [{wch:10},{wch:40},{wch:10},{wch:35},{wch:12},{wch:10},{wch:12},{wch:35},{wch:40},{wch:14},{wch:30}];
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:NCOLS-1} }];
+  ws['!freeze'] = { xSplit:0, ySplit:OFFSET+1 };
+  ws['!rows'] = [
+    {hpt:32}, {hpt:22},
+    {hpt:18},{hpt:18},{hpt:18},{hpt:18},{hpt:18},
+    {hpt:18}, {hpt:20}, {hpt:18}, {hpt:18},
+    {hpt:6}, {hpt:26},
+  ];
 
   try {
     const wb = XLSX.utils.book_new();
@@ -1733,26 +2003,26 @@ function exportRTM() {
 
 function exportTestCases() {
   if (!window.XLSX) { alert('Excel library not loaded — please refresh the page.'); return; }
-  if (!(_currentTestCases || []).length) { alert('No test cases to export.'); return; }
-  const header = ['TC ID', 'Name', 'Scenario ID', 'Technique', 'Priority', 'Preconditions', 'Steps', 'Test Data', 'Expected Result', 'Tags'];
-  const rows = [header];
-  (_currentTestCases || []).forEach(tc => {
-    rows.push([
-      tc.test_case_id || '',
-      tc.name || '',
-      tc.scenario_id || '',
-      tc.technique || '',
-      tc.priority || '',
-      tc.preconditions || '',
-      (tc.steps || []).join(' → '),
-      JSON.stringify(tc.test_data || {}),
-      tc.expected_result || '',
-      (tc.tags || []).join(', '),
-    ]);
+  if (!(_currentTestCases||[]).length) { alert('No test cases to export.'); return; }
+
+  const HDR_S = { font:{bold:true,color:{rgb:'FFFFFF'},sz:10}, fill:{fgColor:{rgb:'1E293B'}}, alignment:{horizontal:'center',vertical:'center',wrapText:true}, border:_xlBdr('334155') };
+  const COLS = ['TC ID','Name','Scenario ID','Technique','Priority','Preconditions','Steps','Test Data','Expected Result','Tags'];
+  const CTR = new Set([0,2,3,4,9]);
+  const hdrRow = COLS.map(h => _xlCell(h, HDR_S));
+
+  const dataRows = (_currentTestCases||[]).map((tc, idx) => {
+    const even = idx%2===0;
+    const ds = (ctr) => ({ font:{sz:10}, fill:{fgColor:{rgb:even?'FFFFFF':'F1F5F9'}}, alignment:{horizontal:ctr?'center':'left',vertical:'top',wrapText:true}, border:_xlBdr() });
+    const vals = [tc.test_case_id||'', tc.name||'', tc.scenario_id||'', tc.technique||'', tc.priority||'', tc.preconditions||'', (tc.steps||[]).join(' → '), JSON.stringify(tc.test_data||{}), tc.expected_result||'', (tc.tags||[]).join(', ')];
+    return vals.map((v,i) => _xlCell(v, ds(CTR.has(i))));
   });
+
+  const ws = XLSX.utils.aoa_to_sheet([hdrRow, ...dataRows]);
+  ws['!cols'] = [{wch:12},{wch:32},{wch:10},{wch:10},{wch:9},{wch:28},{wch:52},{wch:32},{wch:38},{wch:20}];
+  ws['!freeze'] = { xSplit:0, ySplit:1 };
+  ws['!rows'] = [{hpt:26}];
+
   try {
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{wch:10},{wch:30},{wch:10},{wch:10},{wch:8},{wch:25},{wch:50},{wch:30},{wch:35},{wch:20}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Test Cases');
     XLSX.writeFile(wb, 'test_cases.xlsx');
@@ -1763,8 +2033,16 @@ function exportTestCases() {
 
 async function apiError(label, res) {
   let detail = res.statusText;
-  try { const j = await res.json(); detail = j.detail || j.message || detail; } catch {}
-  return `${label} (${res.status}): ${detail}`;
+  try {
+    const j = await res.json();
+    const raw = j.detail || j.message;
+    if (Array.isArray(raw)) {
+      detail = raw.map(e => e.msg).join('; ');
+    } else if (raw) {
+      detail = String(raw);
+    }
+  } catch {}
+  return detail;
 }
 
 function showErr(msg) {
@@ -1827,20 +2105,24 @@ function renderPreview(data) {
       { label: 'Testability',  val: qs.testability,  color: 'var(--green)',
         found: bd.testability_found||[], missing: bd.testability_missing||[], deductions:[] },
       { label: 'Clarity',      val: qs.ambiguity,    color: 'var(--indigo)',
-        found: bd.clarity_found||[], missing: bd.clarity_missing||[], deductions: bd.ambiguity_deductions||[] },
+        found: bd.clarity_found||[], missing: bd.clarity_missing||[], deductions: [] },
     ];
     const dimsHtml = dims.map(m => {
       const evItems = [
         ...(m.found).map(f=>`<li class="ev-found">✓ ${e(f)}</li>`),
         ...(m.missing).map(f=>`<li class="ev-missing">✗ ${e(f)}</li>`),
-        ...(m.deductions).map(d=>`<li class="ev-deduction">− ${e(d)}</li>`),
+        ...(m.deductions).map(d=>`<li class="ev-deduction" style="${d.startsWith('  ·') ? 'padding-left:1.2em;opacity:.8' : ''}">${d.startsWith('  ·') ? e(d) : '− ' + e(d)}</li>`),
       ];
+      const evHtml = evItems.length
+        ? `<details class="qs-details"><summary style="font-size:.74rem;color:var(--muted);cursor:pointer;user-select:none;list-style:none;margin-top:4px">▸ Details</summary><ul class="ev-list" style="margin:6px 0 2px;padding:0;list-style:none">${evItems.join('')}</ul></details>`
+        : '';
       return `<div class="qs-dim">
         <div class="qs-row">
           <div class="qs-row-label">${m.label}</div>
           <div class="qs-bar-wrap"><div class="qs-bar" style="width:${m.val}%;background:${m.color}"></div></div>
           <div class="qs-row-val" style="color:${m.color}">${m.val}%</div>
         </div>
+        ${evHtml}
       </div>`;
     }).join('');
     const formula = `${qs.completeness}×0.40 + ${qs.testability}×0.35 + ${qs.ambiguity}×0.25 = ${qs.overall}`;
@@ -1860,6 +2142,7 @@ function renderPreview(data) {
   } else {
     qsEl.innerHTML = '';
   }
+
 }
 
 // ── Phase 1: Analyze requirement → show preview ──
@@ -1920,7 +2203,213 @@ function cancelRun() {
     _abortController.abort();
     _abortController = null;
   }
+
+  // Clear skeletons immediately — they won't be cleared by the catch/finally
+  // because AbortError is thrown before the render logic that would replace them
+  for (const id of ['sgrid', 'tgrid', 'cgrid']) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  }
+
+  // Reset all action buttons that could be in a loading state
+  const runBtn = document.getElementById('runBtn');
+  if (runBtn) { runBtn.classList.remove('loading'); runBtn.disabled = false; }
+
+  const confirmBtn     = document.getElementById('confirmBtn');
+  const confirmSpinner = document.getElementById('confirmSpinner');
+  const confirmText    = document.getElementById('confirmBtnText');
+  if (confirmBtn)     confirmBtn.disabled = false;
+  if (confirmSpinner) confirmSpinner.style.display = 'none';
+  if (confirmText)    confirmText.textContent = '✓ Confirm & Analyze Scenarios';
+
+  const genTcBtn     = document.getElementById('genTcBtn');
+  const genTcSpinner = document.getElementById('genTcSpinner');
+  const genTcText    = document.getElementById('genTcBtnText');
+  if (genTcBtn)     genTcBtn.disabled = false;
+  if (genTcSpinner) genTcSpinner.style.display = 'none';
+  if (genTcText)    genTcText.textContent = '▶ Generate Test Cases';
+
+  const genCodeBtn     = document.getElementById('genCodeBtn');
+  const codeSpinner    = document.getElementById('codeSpinner');
+  const genCodeText    = document.getElementById('genCodeBtnText');
+  if (genCodeBtn)   genCodeBtn.disabled = false;
+  if (codeSpinner)  codeSpinner.style.display = 'none';
+  if (genCodeText)  genCodeText.textContent = '▶ Generate Code';
+
   document.getElementById('cancelBtn').disabled = true;
+}
+
+// ── Manual test cases ──
+let _manualTestCaseCount = 0;
+let _manualTestCaseIds = new Set();
+
+// ── RTM Status (frontend-only, session ephemeral, NOT persisted) ──
+let _rtmStatus = {}; // { [tc_id]: 'Passed'|'Failed'|'In Progress'|'Block'|'Skipped' }
+
+function setRTMStatus(tcId, val) {
+  if (val) _rtmStatus[tcId] = val; else delete _rtmStatus[tcId];
+  const bar = document.getElementById('rtm-stats-bar');
+  if (bar) bar.innerHTML = _rtmStatsInner(_currentTestCases);
+}
+
+function _rtmStatsInner(testCases) {
+  const all = testCases || [];
+  const STATUS_META = [
+    { key: 'Passed',      color: '#4ade80' },
+    { key: 'Failed',      color: '#f87171' },
+    { key: 'In Progress', color: '#60a5fa' },
+    { key: 'Block',       color: '#fb923c' },
+    { key: 'Skipped',     color: '#94a3b8' },
+  ];
+  const counts = {};
+  STATUS_META.forEach(m => { counts[m.key] = 0; });
+  let notSet = 0;
+  for (const tc of all) {
+    const st = _rtmStatus[tc.test_case_id] || '';
+    if (counts[st] !== undefined) counts[st]++;
+    else notSet++;
+  }
+  const total = all.length;
+  const executed = (counts['Passed'] || 0) + (counts['Failed'] || 0) + (counts['Skipped'] || 0);
+  const pct = total > 0 ? Math.round(executed / total * 100) : 0;
+  const denominator = total - (counts['Skipped'] || 0);
+  const passRate = denominator > 0 ? Math.round((counts['Passed'] || 0) / denominator * 100) : 0;
+
+  const chips = STATUS_META
+    .map(m => `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:999px;font-size:.74rem;font-weight:700;background:${m.color}18;color:${m.color};border:1px solid ${m.color}30;white-space:nowrap">
+      ${e(m.key)} <span style="opacity:.85">${counts[m.key]}</span>
+    </span>`).join('');
+
+  const notSetChip = notSet > 0
+    ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:999px;font-size:.74rem;font-weight:700;background:rgba(255,255,255,.04);color:var(--muted);border:1px solid rgba(255,255,255,.08);white-space:nowrap">
+        Not Set <span style="opacity:.85">${notSet}</span>
+      </span>` : '';
+
+  const progressBar = total > 0 ? `<div style="width:100%;height:4px;background:rgba(255,255,255,.07);border-radius:2px;margin-top:10px;overflow:hidden">
+    <div style="height:100%;width:${pct}%;background:${pct===100?'#4ade80':'#60a5fa'};border-radius:2px;transition:width .3s"></div>
+  </div>` : '';
+
+  return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+    ${chips}${notSetChip}
+    <span style="margin-left:auto;font-size:.75rem;color:var(--muted);white-space:nowrap;font-weight:700">${total} total · ${pct}% executed${executed>0?' · pass rate '+passRate+'%':''}</span>
+  </div>${progressBar}`;
+}
+
+// ── RTM Notes (frontend-only, session ephemeral, NOT persisted) ──
+let _rtmNotes = {}; // { [tc_id]: string }
+
+function setRTMNote(tcId, val) {
+  if (val.trim()) _rtmNotes[tcId] = val; else delete _rtmNotes[tcId];
+}
+
+function _manualTCCacheKey() {
+  try { return 'qa_manual_tc_' + btoa(encodeURIComponent(_currentText || '')).slice(0,20); }
+  catch(e) { return 'qa_manual_tc_default'; }
+}
+
+function _saveManualTCs() {
+  const manuals = _currentTestCases.filter(tc => _manualTestCaseIds.has(tc.test_case_id));
+  try { localStorage.setItem(_manualTCCacheKey(), JSON.stringify(manuals)); } catch(e) {}
+}
+
+function _loadManualTCs() {
+  try {
+    const saved = localStorage.getItem(_manualTCCacheKey());
+    if (!saved) return;
+    const manuals = JSON.parse(saved);
+    for (const tc of manuals) {
+      if (!_currentTestCases.find(x => x.test_case_id === tc.test_case_id)) {
+        _manualTestCaseIds.add(tc.test_case_id);
+        _currentTestCases.push(tc);
+        const n = parseInt((tc.test_case_id||'').replace('TC-M-','')) || 0;
+        if (n > _manualTestCaseCount) _manualTestCaseCount = n;
+      }
+    }
+  } catch(e) {}
+}
+
+function toggleAddTCForm() {
+  const form = document.getElementById('addTCForm');
+  const open = form.style.display !== 'none';
+  form.style.display = open ? 'none' : 'block';
+  if (!open) document.getElementById('tcName').focus();
+}
+
+function submitAddTC() {
+  const name = document.getElementById('tcName').value.trim();
+  if (!name) { document.getElementById('tcName').focus(); return; }
+  const expected = document.getElementById('tcExpected').value.trim();
+  if (!expected) { document.getElementById('tcExpected').focus(); return; }
+  _manualTestCaseCount++;
+  const tid = 'TC-M-' + String(_manualTestCaseCount).padStart(3,'0');
+  const stepsRaw = document.getElementById('tcSteps').value.trim();
+  const steps = stepsRaw ? stepsRaw.split('\n').map(s=>s.trim()).filter(Boolean) : ['Execute the action','Verify the result'];
+  const tc = {
+    test_case_id: tid,
+    name,
+    scenario_id: document.getElementById('tcScenarioId').value.trim() || null,
+    technique: 'UC',
+    priority: document.getElementById('tcPriority').value,
+    type: document.getElementById('tcType').value,
+    tags: [document.getElementById('tcType').value],
+    preconditions: document.getElementById('tcPreconditions').value.trim() || '',
+    steps,
+    expected_result: expected,
+    test_data: {},
+  };
+  _manualTestCaseIds.add(tid);
+  _currentTestCases.push(tc);
+  _saveManualTCs();
+  _syncTCCount();
+  renderTestCases(_currentTestCases, _currentTechniques, _currentSystemType);
+  renderRTM(_currentScenarios, _currentTestCases, _currentReqSummary);
+  ['tcName','tcScenarioId','tcPreconditions','tcSteps','tcExpected'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('tcPriority').value = 'medium';
+  document.getElementById('tcType').value = 'positive';
+  document.getElementById('tcName').focus();
+}
+
+function deleteTC(tid) {
+  _currentTestCases = _currentTestCases.filter(tc => tc.test_case_id !== tid);
+  _manualTestCaseIds.delete(tid);
+  _saveManualTCs();
+  _syncTCCount();
+  renderTestCases(_currentTestCases, _currentTechniques, _currentSystemType);
+  renderRTM(_currentScenarios, _currentTestCases, _currentReqSummary);
+}
+
+function toggleTCEdit(tid) {
+  const view = document.getElementById('tcview-' + tid);
+  const form = document.getElementById('tcedit-' + tid);
+  if (!view || !form) return;
+  const editing = form.style.display !== 'none';
+  view.style.display = editing ? '' : 'none';
+  form.style.display = editing ? 'none' : '';
+  if (!editing) {
+    const card = form.closest('.tc');
+    if (card) card.classList.add('open');
+  }
+}
+
+function saveTCEdit(tid) {
+  const get = id => (document.getElementById(id)?.value || '').trim();
+  const idx = _currentTestCases.findIndex(tc => tc.test_case_id === tid);
+  if (idx === -1) return;
+  const stepsRaw = get('tce-steps-' + tid);
+  const steps = stepsRaw ? stepsRaw.split('\n').map(s=>s.trim()).filter(Boolean) : _currentTestCases[idx].steps;
+  const newType = get('tce-type-' + tid);
+  _currentTestCases[idx] = {
+    ..._currentTestCases[idx],
+    name:           get('tce-name-'     + tid),
+    priority:       get('tce-pri-'      + tid),
+    tags:           [newType],
+    preconditions:  get('tce-pre-'      + tid),
+    steps,
+    expected_result: get('tce-expected-' + tid),
+  };
+  if (_manualTestCaseIds.has(tid)) _saveManualTCs();
+  renderTestCases(_currentTestCases, _currentTechniques, _currentSystemType);
+  renderRTM(_currentScenarios, _currentTestCases, _currentReqSummary);
 }
 
 // ── Manual scenarios ──
@@ -1981,6 +2470,7 @@ function submitAddScenario() {
   _currentScenarios.push(scenario);
   _saveManualScenarios();
   _refreshScenariosUI();
+  _syncScenarioDropdown();
   // reset form fields
   ['scnTitle','scnGiven','scnWhen','scnThen','scnReq','scnEndpoint'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('scnType').value = 'positive';
@@ -1993,6 +2483,7 @@ function deleteScenario(sid) {
   _manualScenarioIds.delete(sid);
   _saveManualScenarios();
   _refreshScenariosUI();
+  _syncScenarioDropdown();
 }
 
 function toggleScenarioEdit(sid) {
@@ -2147,6 +2638,8 @@ function clearData() {
   _currentTechniques = []; _currentFiles = [];
   _pageSCN = 1; _pageTC = 1; _pageCode = 1; _pageRTM = 1; _pageREQ = 1;
   _manualScenarioCount = 0; _manualScenarioIds = new Set();
+  _manualTestCaseCount = 0; _manualTestCaseIds = new Set();
+  _rtmStatus = {}; _rtmNotes = {};
   hideErr();
   resetAgents();
   document.getElementById('previewPanel').classList.remove('show');
@@ -2157,6 +2650,8 @@ function clearData() {
   document.getElementById('genTcBar').style.display = 'none';
   document.getElementById('addScnSection').style.display = 'none';
   document.getElementById('addScnForm').style.display = 'none';
+  document.getElementById('addTCSection').style.display = 'none';
+  document.getElementById('addTCForm').style.display = 'none';
   ta.focus();
 }
 
@@ -2275,6 +2770,7 @@ async function confirm_() {
 
     // Load any previously saved manual scenarios for this requirement
     _loadManualScenarios();
+    _syncScenarioDropdown();
 
     // Update metrics (partial — tc2/tc3 stay at 0 until Agent 2 runs)
     document.getElementById('metrics').style.display = 'grid';
@@ -2288,7 +2784,7 @@ async function confirm_() {
 
     renderOverviewTab(_currentOverview, _currentSuggestions, _currentText, _currentReqSummary, _currentQualityScore, _currentMissingInfo);
     renderScenarios(_currentScenarios);
-    document.getElementById('tc4').textContent = _currentScenarios.length;
+    document.getElementById('tc4').textContent = '0';
 
     // Show gen-tc bar + add-scenario section
     document.getElementById('genTcBarCount').textContent = _currentScenarios.length;
@@ -2359,6 +2855,8 @@ async function triggerGenerateTC() {
     _currentTechniques = techniques;
     _currentSystemType = systemType;
     _pageTC = 1;
+    _loadManualTCs();
+    // RTM Status and Notes are frontend-ephemeral (not persisted) — no load needed
     _currentPayloadTemplates = a2.payload_templates || [];
     _currentTestDataMatrix = a2.test_data_matrix || [];
     const _tcMs = a2._meta?.elapsed_ms;
@@ -2367,15 +2865,18 @@ async function triggerGenerateTC() {
     countUp(document.getElementById('mv2'), testCases.length);
     document.getElementById('tc2').textContent = testCases.length;
     document.getElementById('tc3').textContent = '0';
+    renderCode([], fw);  // clear stale code from previous Agent 3 run
 
     renderTestCases(testCases, techniques, systemType);
+    renderScenarios(_currentScenarios);
     renderRTM(_currentScenarios, testCases, _currentReqSummary);
     document.getElementById('tc4').textContent = _currentScenarios.length;
 
-    // Hide gen-tc bar + add scenario section, show code prompt bar
+    // Hide gen-tc bar + add scenario section, show code prompt bar + add TC section
     document.getElementById('genTcBar').style.display = 'none';
     document.getElementById('addScnSection').style.display = 'none';
     document.getElementById('addScnForm').style.display = 'none';
+    document.getElementById('addTCSection').style.display = 'block';
     agent(3, '', 'Ready');
     document.getElementById('codePromptBar').style.display = 'flex';
 

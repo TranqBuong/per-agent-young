@@ -3,8 +3,13 @@ import os
 import re
 from typing import Dict, Any
 
-from groq import Groq, BadRequestError
+from openai import OpenAI, BadRequestError
 from backend.app.services.groq_retry import call_with_backoff
+
+
+def _sanitize_text(text: str) -> str:
+    """Replace chars that cause LLM to produce broken JSON escape sequences."""
+    return text.replace('\\', '/').replace('"', "'")
 
 _PREVIEW_SYSTEM_PROMPT = """You are a senior QA analyst. Analyze the requirement and answer a checklist — do NOT compute scores yourself (the system calculates scores from your answers).
 
@@ -29,11 +34,11 @@ _PREVIEW_SYSTEM_PROMPT = """You are a senior QA analyst. Analyze the requirement
 - logical_flow: Is the requirement structured in a clear logical order (preconditions → action → result)?
 - specific_acceptance_criteria: Do acceptance criteria use specific, measurable language (exact numbers, formats, status codes)?
 
-## Clarity issues — list ONLY items actually present in the requirement text
-- vague_words: list each vague word/phrase found (e.g. "appropriate", "fast", "user-friendly")
-- undefined_terms: list each term or acronym not defined in the requirement
-- conflicting_statements: list each pair of contradictory statements (as short description)
-- implicit_assumptions: list each assumption not explicitly stated
+## Clarity issues — list ONLY items that are objectively and clearly present
+- vague_words: ONLY non-measurable technical qualifiers that prevent deterministic testing — e.g. "fast", "user-friendly", "appropriate", "good", "reasonable", "simple". Do NOT list modal verbs like "should/must/shall" (those are requirement conventions), common REST/HTTP terms, or plain English words. Be conservative: if unclear whether it is vague, do NOT include it.
+- undefined_terms: ONLY domain-specific business acronyms or proprietary terms that a new engineer would not know without a definition. Do NOT list standard HTTP/REST/JSON/SQL terms, framework names, or common programming terms.
+- conflicting_statements: ONLY pairs where two statements directly contradict each other (e.g. "field is required" vs "field is optional"). Do NOT list statements that are merely different or additive.
+- implicit_assumptions: ONLY assumptions that materially affect test design and are NOT implied by the req type (e.g. "user must exist in DB" when no creation endpoint is given). Do NOT list obvious infrastructure assumptions ("server is running", "network is available").
 
 Return ONLY a valid JSON object — no markdown, no explanation:
 {
@@ -153,6 +158,61 @@ def _extract_json(text: str) -> str:
     return text[start:]
 
 
+def _repair_unescaped_quotes(text: str) -> str:
+    """Repair JSON strings that contain literal quotes without escaping.
+
+    This is a best-effort heuristic for malformed outputs where a model writes:
+      {"summary": "Use "quotes" inside text"}
+    and we need to recover to:
+      {"summary": "Use \"quotes\" inside text"}
+    """
+    out = []
+    in_string = False
+    escape_next = False
+
+    for i, ch in enumerate(text):
+        if escape_next:
+            out.append(ch)
+            escape_next = False
+            continue
+
+        if ch == '\\' and in_string:
+            out.append(ch)
+            escape_next = True
+            continue
+
+        if ch == '"':
+            if in_string:
+                j = i + 1
+                while j < len(text) and text[j].isspace():
+                    j += 1
+                if j >= len(text) or text[j] in ',:}]':
+                    out.append(ch)
+                    in_string = False
+                else:
+                    out.append('\\"')
+            else:
+                k = len(out) - 1
+                while k >= 0 and out[k] in " \t\r\n":
+                    k -= 1
+                prev_sig = out[k] if k >= 0 else ''
+                if prev_sig in '{[,:':
+                    out.append(ch)
+                    in_string = True
+                else:
+                    out.append(ch)
+            continue
+
+        if in_string and ch in '\n\r':
+            out.append('\\n' if ch == '\n' else '\\r')
+            continue
+
+        out.append(ch)
+
+    return ''.join(out)
+
+
+
 def _parse_json(text: str) -> Dict[str, Any]:
     text = text.strip()
     if text.startswith("```"):
@@ -162,23 +222,18 @@ def _parse_json(text: str) -> Dict[str, Any]:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        out, in_string, escape_next = [], False, False
-        for ch in text:
-            if escape_next:
-                out.append(ch); escape_next = False
-            elif ch == '\\':
-                out.append(ch); escape_next = True
-            elif ch == '"':
-                out.append(ch); in_string = not in_string
-            elif in_string and ch == '\n':
-                out.append('\\n')
-            elif in_string and ch == '\r':
-                out.append('\\r')
-            elif in_string and ch == '\t':
-                out.append('\\t')
-            else:
-                out.append(ch)
-        return json.loads(''.join(out))
+        repaired = _repair_unescaped_quotes(text)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            # Repair pass 2: add missing commas between values on separate lines.
+            repaired2 = re.sub(
+                r'([}]"0-9]|true|false|null)([ \t]*\n[ \t]*)("|\{|\[)',
+                r'\1,\2\3',
+                repaired,
+            )
+            return json.loads(repaired2)
+
 
 
 _COMPLETENESS_ITEMS = {
@@ -198,19 +253,26 @@ _TESTABILITY_ITEMS = {
     "no_vague_language":    ("No vague language (should/might/could)", 10),
 }
 
-# Clarity: base 50 + positive (+50 max) - deductions
-_CLARITY_POSITIVE = {
-    "has_concrete_examples":        ("Concrete examples provided", 15),
-    "terms_defined":                ("Domain terms & acronyms defined", 15),
-    "logical_flow":                 ("Logical flow: precondition → action → result", 10),
-    "specific_acceptance_criteria": ("Acceptance criteria use exact values/formats", 10),
+# Clarity: 8 binary items × 12.5 pts each = 100 max
+# 4 positive (from LLM clarity_positive booleans)
+# 4 negative (pass when the corresponding clarity_issues list is empty)
+_CLARITY_ITEMS = {
+    "has_concrete_examples":        ("Concrete examples provided",                   12.5),
+    "terms_defined":                ("Domain terms & acronyms defined",              12.5),
+    "logical_flow":                 ("Logical flow: precondition → action → result", 12.5),
+    "specific_acceptance_criteria": ("Acceptance criteria use exact values/formats", 12.5),
+    "no_vague_words":               ("No vague qualifiers",                          12.5),
+    "no_undefined_terms":           ("No undefined terms/acronyms",                  12.5),
+    "no_conflicting_statements":    ("No conflicting statements",                    12.5),
+    "no_implicit_assumptions":      ("No implicit assumptions",                      12.5),
 }
 
-_CLARITY_DEDUCTIONS = {
-    "vague_words":             ("vague word", 15),
-    "undefined_terms":         ("undefined term/acronym", 10),
-    "conflicting_statements":  ("conflicting statement", 20),
-    "implicit_assumptions":    ("implicit assumption", 10),
+# Maps each negative item key → the issues list key it checks
+_CLARITY_NEGATIVE_MAP = {
+    "no_vague_words":            "vague_words",
+    "no_undefined_terms":        "undefined_terms",
+    "no_conflicting_statements": "conflicting_statements",
+    "no_implicit_assumptions":   "implicit_assumptions",
 }
 
 
@@ -241,25 +303,23 @@ def _compute_quality_score(data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             test_missing.append(f"{label} (0/{pts})")
 
-    # Clarity: base 50 + positive bonuses - deductions
-    ambiguity = 50
-    clarity_pos_found, clarity_pos_missing = [], []
-    for key, (label, pts) in _CLARITY_POSITIVE.items():
-        if pos_checks.get(key, False):
-            ambiguity += pts
-            clarity_pos_found.append(f"{label} (+{pts})")
+    # Clarity: 8 binary items × 12.5 pts each = 100 max
+    ambiguity_raw = 0.0
+    clarity_found, clarity_missing = [], []
+    for key, (label, pts) in _CLARITY_ITEMS.items():
+        if key in _CLARITY_NEGATIVE_MAP:
+            items = clarity_issues.get(_CLARITY_NEGATIVE_MAP[key], [])
+            if not isinstance(items, list):
+                items = []
+            passed = len(items) == 0
         else:
-            clarity_pos_missing.append(f"{label} (0/{pts})")
-
-    deductions = []
-    for key, (label, cost) in _CLARITY_DEDUCTIONS.items():
-        items = clarity_issues.get(key, [])
-        if not isinstance(items, list):
-            items = []
-        for item in items:
-            ambiguity -= cost
-            deductions.append(f'"{item}" — {label} (−{cost})')
-    ambiguity = max(0, min(100, ambiguity))
+            passed = pos_checks.get(key, False)
+        if passed:
+            ambiguity_raw += pts
+            clarity_found.append(f"{label} (+{int(pts)})")
+        else:
+            clarity_missing.append(f"{label} (0/{int(pts)})")
+    ambiguity = round(ambiguity_raw)
 
     overall = round(completeness * 0.40 + testability * 0.35 + ambiguity * 0.25)
     risk = "High" if overall < 60 else ("Medium" if overall < 80 else "Low")
@@ -271,31 +331,34 @@ def _compute_quality_score(data: Dict[str, Any]) -> Dict[str, Any]:
         "ambiguity": ambiguity,
         "risk": risk,
         "score_breakdown": {
-            "completeness_found":    comp_found,
-            "completeness_missing":  comp_missing,
-            "testability_found":     test_found,
-            "testability_missing":   test_missing,
-            "ambiguity_deductions":  deductions,
-            "clarity_found":         clarity_pos_found,
-            "clarity_missing":       clarity_pos_missing,
+            "completeness_found":   comp_found,
+            "completeness_missing": comp_missing,
+            "testability_found":    test_found,
+            "testability_missing":  test_missing,
+            "clarity_found":        clarity_found,
+            "clarity_missing":      clarity_missing,
         },
     }
 
 
-_DEFAULT_MODEL = "llama-3.1-8b-instant"
+_DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
+_AIP_BASE_URL = "https://maas-llm-aiplatform-hcm.api.vngcloud.vn/v1"
 
 
 class RequirementAnalyzer:
     def __init__(self, model: str = None):
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = os.environ.get("GREENNODE_AIP_KEY")
         if not api_key:
             raise RuntimeError(
-                "GROQ_API_KEY environment variable is not set. "
-                "Export it before starting the server: export GROQ_API_KEY=<your-key>"
+                "GREENNODE_AIP_KEY environment variable is not set. "
+                "Export it before starting the server: export GREENNODE_AIP_KEY=<your-key>"
             )
-        self.client = Groq(api_key=api_key)
-        self.model = model or os.environ.get("GROQ_MODEL", _DEFAULT_MODEL)
-        self.light_model = os.environ.get("GROQ_MODEL_LIGHT", _DEFAULT_MODEL)
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=os.environ.get("GREENNODE_AIP_BASE_URL", _AIP_BASE_URL),
+        )
+        self.model = model or os.environ.get("GREENNODE_MODEL", _DEFAULT_MODEL)
+        self.light_model = os.environ.get("GREENNODE_MODEL_LIGHT", _DEFAULT_MODEL)
 
     def _chat(self, model: str, max_tokens: int, system: str, user: str) -> str:
         def _once(u=user):
@@ -313,20 +376,42 @@ class RequirementAnalyzer:
             return call_with_backoff(_once, label="Agent1")
         except BadRequestError as e:
             if "json_validate_failed" in str(e):
-                retry_user = "Output ONLY valid JSON, no markdown.\n\n" + user
-                return call_with_backoff(lambda: self.client.chat.completions.create(
-                    model=model, max_tokens=max_tokens, temperature=0, seed=42,
-                    response_format={"type": "json_object"},
-                    messages=[{"role": "system", "content": system}, {"role": "user", "content": retry_user}],
-                ).choices[0].message.content or "", label="Agent1-retry")
-            raise RuntimeError(f"Groq bad request: {e}") from e
+                # Retry without server-side JSON validation — rely on client-side _parse_json
+                retry_user = "Output ONLY a valid JSON object, no markdown, no extra text.\n\n" + user
+                def _retry_once(u=retry_user):
+                    completion = self.client.chat.completions.create(
+                        model=model, max_tokens=max_tokens, temperature=0, seed=42,
+                        messages=[{"role": "system", "content": system}, {"role": "user", "content": u}],
+                    )
+                    return completion.choices[0].message.content or ""
+                return call_with_backoff(_retry_once, label="Agent1-retry")
+            raise RuntimeError(f"API bad request: {e}") from e
 
     def preview(self, text: str) -> Dict[str, Any]:
-        raw = self._chat(self.light_model, 2200, _PREVIEW_SYSTEM_PROMPT, f"Analyze this requirement:\n\n{text}")
-        data = _parse_json(raw)
+        safe = _sanitize_text(text)
+        prompt = f"Analyze this requirement:\n\n{safe}"
+        raw = self._chat(self.light_model, 3000, _PREVIEW_SYSTEM_PROMPT, prompt)
+        try:
+            data = _parse_json(raw)
+        except json.JSONDecodeError:
+            raw = self._chat(
+                self.light_model, 3000, _PREVIEW_SYSTEM_PROMPT,
+                "Output ONLY a valid JSON object, no markdown, no extra text.\n\n" + prompt,
+            )
+            data = _parse_json(raw)
+        data["_input_length"] = len(safe)
         data["quality_score"] = _compute_quality_score(data)
         return data
 
     def analyze(self, text: str) -> Dict[str, Any]:
-        raw = self._chat(self.model, 4000, _SCENARIOS_SYSTEM_PROMPT, f"Generate comprehensive test scenarios for this requirement:\n\n{text}")
-        return _parse_json(raw)
+        safe = _sanitize_text(text)
+        prompt = f"Generate comprehensive test scenarios for this requirement:\n\n{safe}"
+        raw = self._chat(self.model, 6000, _SCENARIOS_SYSTEM_PROMPT, prompt)
+        try:
+            return _parse_json(raw)
+        except json.JSONDecodeError:
+            raw = self._chat(
+                self.model, 6000, _SCENARIOS_SYSTEM_PROMPT,
+                "Output ONLY a valid JSON object, no markdown, no extra text.\n\n" + prompt,
+            )
+            return _parse_json(raw)

@@ -1,5 +1,8 @@
 # Architecture Proposal — Multi-Agent Automation Engineer
 
+> **Status: Initial proposal — not adopted.**
+> Actual implementation uses custom Python workflow classes (`MVPWorkflow`, `TestCasePayloadWorkflow`, `AutomationCodeWorkflow`, `FullPipelineWorkflow`) without LangGraph or CrewAI. LLM calls go directly via Groq SDK with exponential-backoff retry.
+
 ## Goal
 Build a multi-agent system that can transform product requirements and API specs into:
 - test scenarios

@@ -1,54 +1,61 @@
+import ast
 import json
+import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 
-from groq import Groq, BadRequestError
+from openai import OpenAI, BadRequestError
 from backend.app.services.groq_retry import call_with_backoff
 
-_SYSTEM_PROMPT = """You are Automation Code Writer, an expert test automation engineer.
+_logger = logging.getLogger(__name__)
 
-## Objective
-Convert test cases into complete, executable automation code files.
+_FRAMEWORK_GUIDES = {
+    "pytest":     "use `requests` library, `conftest.py` with fixtures (base_url, auth headers), clear assertions.",
+    "playwright": "use `playwright-python` sync API, `pytest-playwright` fixtures.",
+    "k6":         "use k6 JavaScript API (`import http from 'k6/http'`), `check()` assertions, export `default function`.",
+    "selenium":   "use `selenium` WebDriver with `pytest`, `webdriver.Chrome()` with `Options`, explicit `WebDriverWait`, `By` selectors.",
+    "postman":    "generate a valid Postman Collection v2.1 JSON (`info`, `item[]` array). Each TC → one `item` with `request` and `event` (test scripts using `pm.test`/`pm.response.to.have.status`). Output a single `.json` collection file.",
+}
 
-## Framework guidance
-- **pytest**: use `requests` library, `conftest.py` with fixtures (base_url, auth headers), clear assertions.
-- **playwright**: use `playwright-python` sync API, `pytest-playwright` fixtures.
-- **k6**: use k6 JavaScript API (`import http from 'k6/http'`), `check()` assertions, export `default function`.
-- **selenium**: use `selenium` WebDriver with `pytest`, `webdriver.Chrome()` with `Options`, explicit `WebDriverWait`, `By` selectors.
-- **postman**: generate a valid Postman Collection v2.1 JSON (`info`, `item[]` array). Each test case becomes one `item` with `request` (method, url, headers, body) and `event` (test scripts using `pm.test` / `pm.response.to.have.status`). Output as a single `.json` collection file.
+_SYSTEM_PROMPT_TEMPLATE = """You are an expert test automation engineer.
+Your ONLY task: generate executable {framework} test code for each test case provided.
 
-## Grounding rules (strictly enforced)
-1. Assertions MUST verify exactly what `expected_result` states — status code, response fields, or error messages stated there.
-2. Use the exact values from `test_data` field — do not substitute or invent different values.
-3. steps define the action sequence — follow them exactly.
+## Framework: {framework}
+{guide}
 
-## Implementation rules
-4. Generate one test file per test case (or group related ones by scenario_id).
-5. Each file must be complete and runnable — no `...` or TODO stubs.
-6. Use environment variable references (`os.environ.get("BASE_URL", "http://localhost:8000")`).
-7. Name each test function after test_case_id: e.g. `def test_TC001_valid_login():`.
+## Input fields (each test case from Agent 2)
+test_case_id | name | steps | test_data | expected_result | technique | scenario_id
+
+## Rules
+1. ONE test function per test case — never merge, split, or add extras.
+2. Use exact values from `test_data` — never invent or substitute values.
+3. Follow `steps` in order — each step maps to a code statement.
+4. Assert exactly what `expected_result` states.
+5. Every function must be complete and runnable — no `...`, `pass`, or TODO stubs.
+6. Use `os.environ.get("BASE_URL", "http://localhost:8000")` for the base URL.
+7. Function naming: `def test_{{test_case_id}}_{{snake_case_name}}():`.
+8. Apply `technique` to assertions:
+   BVA → exact boundary values | EG/EP → HTTP status codes or error messages | DT → decision-table combinations | UC → end-to-end flow outcome.
 
 ## Output Format — REQUIRED
-Use ONLY this separator format (no JSON, no markdown):
-
-===FILE:tests/test_example.py===
-import os
-import requests
-
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
-
-def test_TC001_example():
-    r = requests.post(f"{BASE_URL}/login", json={"email": "user@test.com"})
-    assert r.status_code == 200
+===FILE:tests/test_{{test_case_id}}.py===
+<complete runnable code>
 ===END===
 
-Repeat ===FILE:path=== ... ===END=== for each file. Nothing outside these blocks."""
+One ===FILE=== block per test case, named after test_case_id.
+Output ONLY ===FILE=== blocks — no markdown, no explanation, nothing outside them.
+Do NOT generate conftest.py, fixtures files, or any helper files — test functions only."""
+
+
+def _system_prompt(framework: str) -> str:
+    guide = _FRAMEWORK_GUIDES.get(framework, _FRAMEWORK_GUIDES["pytest"])
+    return _SYSTEM_PROMPT_TEMPLATE.format(framework=framework, guide=guide)
 
 
 def _parse_separator(text: str, framework: str) -> Dict[str, Any]:
-    """Parse ===FILE:path=== ... ===END=== blocks — no JSON escaping issues.
-    ===END=== must appear at the start of a line to avoid false matches inside code."""
+    """Parse ===FILE:path=== ... ===END=== blocks — no JSON escaping issues."""
     files = []
     for m in re.finditer(r'===FILE:([^\n=]+)===\s*(.*?)^===END===', text, re.DOTALL | re.MULTILINE):
         path = m.group(1).strip()
@@ -57,8 +64,21 @@ def _parse_separator(text: str, framework: str) -> Dict[str, Any]:
             files.append({"file_name": path, "code": code, "explanation": ""})
     if files:
         return {"framework": framework, "generated_files": files}
-    # Fallback: try JSON if no separator blocks found
-    return _parse_json_fallback(text, framework)
+
+    # Truncated response: ===FILE:path=== present but ===END=== missing (cut by max_tokens)
+    m = re.search(r'===FILE:([^\n=]+)===\s*([\s\S]+)', text)
+    if m:
+        path = m.group(1).strip()
+        code = m.group(2).strip()
+        if path and code:
+            return {"framework": framework, "generated_files": [{"file_name": path, "code": code, "explanation": ""}]}
+
+    # Last-resort JSON fallback — only if response actually looks like JSON
+    stripped = text.strip()
+    if stripped.startswith('{') or stripped.startswith('['):
+        return _parse_json_fallback(text, framework)
+
+    return {"framework": framework, "generated_files": []}
 
 
 def _parse_json_fallback(text: str, framework: str) -> Dict[str, Any]:
@@ -99,6 +119,16 @@ def _extract_json(text: str) -> str:
     raise ValueError("Could not extract valid JSON")
 
 
+def _normalize_json_like(text: str) -> str:
+    text = re.sub(r',\s*([}\]])', r'\1', text)
+    text = re.sub(
+        r'(?P<prefix>[{\s,])(?P<key>[A-Za-z_][A-Za-z0-9_]*)' r'(?P<suffix>\s*:)',
+        r'\g<prefix>"\g<key>"\g<suffix>',
+        text,
+    )
+    return text
+
+
 def _parse_json(text: str) -> Dict[str, Any]:
     text = text.strip()
     if text.startswith("```"):
@@ -108,60 +138,51 @@ def _parse_json(text: str) -> Dict[str, Any]:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        out, in_string, escape_next = [], False, False
-        for ch in text:
-            if escape_next:
-                out.append(ch); escape_next = False
-            elif ch == '\\':
-                out.append(ch); escape_next = True
-            elif ch == '"':
-                out.append(ch); in_string = not in_string
-            elif in_string and ch == '\n':
-                out.append('\\n')
-            elif in_string and ch == '\r':
-                out.append('\\r')
-            elif in_string and ch == '\t':
-                out.append('\\t')
-            else:
-                out.append(ch)
-        return json.loads(''.join(out))
+        try:
+            return ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            normalized = _normalize_json_like(text)
+            try:
+                return json.loads(normalized)
+            except json.JSONDecodeError:
+                return ast.literal_eval(normalized)
 
 
-_BATCH_SIZE = 5
+_BATCH_SIZE = 1
+_MAX_WORKERS = 5  # concurrent LLM calls for Agent 3
 
 
 def _slim_tc(tc: Dict[str, Any]) -> Dict[str, Any]:
     """Keep only fields Agent 3 needs — reduces input tokens."""
-    slim = {
-        "test_case_id":  tc.get("test_case_id", ""),
-        "name":          tc.get("name", ""),
-        "scenario_id":   tc.get("scenario_id", ""),
-        "technique":     tc.get("technique", ""),
-        "preconditions": tc.get("preconditions", ""),
-        "steps":         tc.get("steps", []),
-        "test_data":     tc.get("test_data", {}),
+    return {
+        "test_case_id":    tc.get("test_case_id", ""),
+        "scenario_id":     tc.get("scenario_id", ""),
+        "technique":       tc.get("technique", ""),
+        "name":            tc.get("name", ""),
+        "steps":           tc.get("steps", []),
+        "test_data":       tc.get("test_data", {}),
         "expected_result": tc.get("expected_result", ""),
-        "priority":      tc.get("priority", "medium"),
+        "preconditions":   tc.get("preconditions", ""),
     }
-    # Include tags for context (security, boundary, etc.)
-    if tc.get("tags"):
-        slim["tags"] = tc["tags"]
-    return slim
 
 
-_DEFAULT_MODEL = "llama-3.1-8b-instant"
+_DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
+_AIP_BASE_URL = "https://maas-llm-aiplatform-hcm.api.vngcloud.vn/v1"
 
 
 class AutomationCodeWriter:
     def __init__(self, model: str = None):
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = os.environ.get("GREENNODE_AIP_KEY")
         if not api_key:
             raise RuntimeError(
-                "GROQ_API_KEY environment variable is not set. "
-                "Export it before starting the server: export GROQ_API_KEY=<your-key>"
+                "GREENNODE_AIP_KEY environment variable is not set. "
+                "Export it before starting the server: export GREENNODE_AIP_KEY=<your-key>"
             )
-        self.client = Groq(api_key=api_key)
-        self.model = model or os.environ.get("GROQ_MODEL", _DEFAULT_MODEL)
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=os.environ.get("GREENNODE_AIP_BASE_URL", _AIP_BASE_URL),
+        )
+        self.model = model or os.environ.get("GREENNODE_MODEL", _DEFAULT_MODEL)
 
     def generate(
         self,
@@ -171,49 +192,48 @@ class AutomationCodeWriter:
         payload_templates: Optional[List[Dict[str, Any]]] = None,
         test_data_matrix: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        if not test_cases:
+            _logger.warning("Agent3: no test_cases provided — returning empty result")
+            return {"framework": framework, "generated_files": []}
+
+        batches = [test_cases[i:i + _BATCH_SIZE] for i in range(0, len(test_cases), _BATCH_SIZE)]
+        results_by_index: Dict[int, Dict] = {}
+
+        with ThreadPoolExecutor(max_workers=min(len(batches), _MAX_WORKERS)) as executor:
+            future_to_idx = {
+                executor.submit(self._generate_batch, batch, framework): idx
+                for idx, batch in enumerate(batches)
+            }
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    results_by_index[idx] = future.result()
+                except Exception as exc:
+                    _logger.error("Agent3 batch %d failed: %s", idx, exc)
+                    results_by_index[idx] = {"generated_files": []}
+
         all_files = []
-        for i in range(0, max(len(test_cases), 1), _BATCH_SIZE):
-            batch = test_cases[i:i + _BATCH_SIZE]
-            result = self._generate_batch(batch, framework, requirement_text, payload_templates, test_data_matrix)
-            all_files.extend(result.get("generated_files", []))
+        for idx in sorted(results_by_index.keys()):
+            all_files.extend(results_by_index[idx].get("generated_files", []))
+
         return {"framework": framework, "generated_files": all_files}
 
     def _generate_batch(
         self,
         test_cases: List[Dict[str, Any]],
         framework: str,
-        requirement_text: Optional[str],
-        payload_templates: Optional[List[Dict[str, Any]]],
-        test_data_matrix: Optional[List[Dict[str, Any]]],
     ) -> Dict[str, Any]:
         slim = [_slim_tc(tc) for tc in test_cases]
-        tc_ids = {tc.get("test_case_id") for tc in slim}
 
-        parts = []
-        if requirement_text:
-            parts.append(f"Requirement context:\n{requirement_text[:700]}")
-
-        parts.append(
-            f"Generate complete {framework} automation test files for these test cases:\n\n"
-            f"{json.dumps(slim, ensure_ascii=False, indent=2)}"
+        user_msg = (
+            f"Generate {framework} automation test files for these test cases:\n\n"
+            f"{json.dumps(slim, ensure_ascii=False)}"
         )
-
-        if payload_templates:
-            batch_tpl = [pt for pt in payload_templates if pt.get("test_case_id") in tc_ids]
-            if batch_tpl:
-                parts.append(f"Payload templates (use these for request bodies):\n{json.dumps(batch_tpl, ensure_ascii=False, indent=2)}")
-
-        if test_data_matrix:
-            batch_matrix = [row for row in test_data_matrix if row.get("test_case_id") in tc_ids]
-            if batch_matrix:
-                parts.append(f"Test data matrix:\n{json.dumps(batch_matrix, ensure_ascii=False, indent=2)}")
-
-        user_msg = "\n\n".join(parts)
 
         def _once(msg=user_msg):
             completion = self.client.chat.completions.create(
-                model=self.model, max_tokens=4000, temperature=0, seed=42,
-                messages=[{"role": "system", "content": _SYSTEM_PROMPT}, {"role": "user", "content": msg}],
+                model=self.model, max_tokens=3000, temperature=0,
+                messages=[{"role": "system", "content": _system_prompt(framework)}, {"role": "user", "content": msg}],
             )
             text = completion.choices[0].message.content or ""
             if not text.strip():
@@ -228,8 +248,8 @@ class AutomationCodeWriter:
                 return call_with_backoff(
                     lambda: _parse_separator(
                         self.client.chat.completions.create(
-                            model=self.model, max_tokens=4000, temperature=0, seed=42,
-                            messages=[{"role": "system", "content": _SYSTEM_PROMPT}, {"role": "user", "content": retry_msg}],
+                            model=self.model, max_tokens=3000, temperature=0,
+                            messages=[{"role": "system", "content": _system_prompt(framework)}, {"role": "user", "content": retry_msg}],
                         ).choices[0].message.content or "",
                         framework,
                     ),

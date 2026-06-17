@@ -274,3 +274,155 @@ paths:
     r = client.post("/parse-file", files={"file": ("spec.yml", yaml_spec, "application/yaml")})
     assert r.status_code == 200
     assert "Auth API" in r.json()["content"]
+
+
+# ── /run-tests ────────────────────────────────────────────────────────────────
+
+SAMPLE_PYTEST_FILE = {
+    "file_name": "test_login.py",
+    "code": "def test_always_passes():\n    assert 1 + 1 == 2\n",
+}
+
+SAMPLE_FAILING_FILE = {
+    "file_name": "test_fail.py",
+    "code": "def test_always_fails():\n    assert False, 'expected failure'\n",
+}
+
+
+def test_run_tests_unsupported_framework(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "playwright",
+        "base_url": "",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["supported"] is False
+    assert "playwright" in data["message"]
+
+
+def test_run_tests_unsupported_k6(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "k6",
+        "base_url": "",
+    })
+    assert r.status_code == 200
+    assert r.json()["supported"] is False
+
+
+def test_run_tests_invalid_base_url(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "pytest",
+        "base_url": "not-a-url",
+    })
+    assert r.status_code == 400
+
+
+def test_run_tests_empty_files_rejected(client):
+    r = client.post("/run-tests", json={
+        "files": [],
+        "framework": "pytest",
+        "base_url": "",
+    })
+    assert r.status_code == 400
+
+
+def test_run_tests_missing_files_field(client):
+    r = client.post("/run-tests", json={"framework": "pytest"})
+    assert r.status_code == 422
+
+
+def test_run_tests_pytest_passes(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "pytest",
+        "base_url": "",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["supported"] is True
+    assert data["passed"] >= 1
+    assert data["failed"] == 0
+    assert data["return_code"] == 0
+
+
+def test_run_tests_pytest_fails(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_FAILING_FILE],
+        "framework": "pytest",
+        "base_url": "",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["supported"] is True
+    assert data["failed"] >= 1
+    assert data["return_code"] != 0
+
+
+def test_run_tests_response_has_required_fields(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "pytest",
+        "base_url": "",
+    })
+    data = r.json()
+    for field in ("supported", "passed", "failed", "errors", "total", "output", "test_results", "return_code"):
+        assert field in data, f"missing field: {field}"
+
+
+def test_run_tests_total_equals_passed_plus_failed_plus_errors(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "pytest",
+        "base_url": "",
+    })
+    data = r.json()
+    assert data["total"] == data["passed"] + data["failed"] + data["errors"]
+
+
+def test_run_tests_base_url_http_accepted(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "pytest",
+        "base_url": "http://localhost:8080",
+    })
+    assert r.status_code == 200
+
+
+def test_run_tests_base_url_https_accepted(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE],
+        "framework": "pytest",
+        "base_url": "https://api.example.com",
+    })
+    assert r.status_code == 200
+
+
+def test_run_tests_multiple_files_combined(client):
+    r = client.post("/run-tests", json={
+        "files": [SAMPLE_PYTEST_FILE, {
+            "file_name": "test_extra.py",
+            "code": "def test_extra():\n    assert 2 * 2 == 4\n",
+        }],
+        "framework": "pytest",
+        "base_url": "",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["passed"] >= 2
+
+
+def test_run_tests_output_truncated_to_8000(client):
+    # Very long output should be truncated
+    long_code = "\n".join(
+        [f"def test_{i}():\n    assert {i} == {i}" for i in range(200)]
+    )
+    r = client.post("/run-tests", json={
+        "files": [{"file_name": "test_long.py", "code": long_code}],
+        "framework": "pytest",
+        "base_url": "",
+    })
+    assert r.status_code == 200
+    assert len(r.json()["output"]) <= 8000

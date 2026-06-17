@@ -102,8 +102,9 @@ class TestTestCaseItem:
         assert tc.test_data == {"value": "some value"}
 
     def test_test_data_from_list(self):
+        # List has no field names — coerced to empty dict to avoid meaningless {"0": ...} keys
         tc = self._make(test_data=["a", "b"])
-        assert tc.test_data == {"0": "a", "1": "b"}
+        assert tc.test_data == {}
 
     def test_test_data_from_none(self):
         tc = self._make(test_data=None)
