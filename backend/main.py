@@ -3,11 +3,14 @@ import io
 import json
 import os
 import re
+import subprocess
+import tempfile
 import time
 import logging
 import urllib.request
 import urllib.error
-from typing import List
+from pathlib import Path as _Path
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Request, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -23,6 +26,7 @@ from backend.app.workflows.full_pipeline_workflow import FullPipelineWorkflow
 from pydantic import BaseModel
 from backend.app.schemas.agent_schemas import (
     RequirementInput,
+    RequirementPreviewResult,
     GenerateTestCasesInput,
     GenerateAutomationCodeInput,
 )
@@ -91,6 +95,39 @@ cache = CacheService()
 @app.get("/health")
 def health_check():
     return {"status": "ok", "message": "Multi-Agent Automation Engineer backend is running"}
+
+
+def _inject_base_url(code: str, base_url: str) -> str:
+    replacement = f'BASE_URL = "{base_url}"'
+    new_code, n = re.subn(r'BASE_URL\s*=\s*["\'].*?["\']', replacement, code)
+    if n == 0:
+        new_code = replacement + "\n" + code
+    return new_code
+
+
+def _parse_pytest_output(output: str) -> dict:
+    passed = failed = errors = 0
+    for line in output.splitlines():
+        m = re.search(r'(\d+)\s+passed', line, re.IGNORECASE)
+        if m:
+            passed = max(passed, int(m.group(1)))
+        m = re.search(r'(\d+)\s+failed', line, re.IGNORECASE)
+        if m:
+            failed = max(failed, int(m.group(1)))
+        m = re.search(r'(\d+)\s+error', line, re.IGNORECASE)
+        if m:
+            errors = max(errors, int(m.group(1)))
+    test_results = [
+        line for line in output.splitlines()
+        if line.startswith(("PASSED", "FAILED", "ERROR"))
+    ]
+    return {
+        "passed": passed,
+        "failed": failed,
+        "errors": errors,
+        "total": passed + failed + errors,
+        "test_results": test_results,
+    }
 
 
 def _timed(data: dict, elapsed: float, cached: bool = False) -> JSONResponse:
@@ -204,8 +241,12 @@ def preview_requirements(payload: RequirementInput):
     if cached:
         return _timed(cached, time.time() - t0, cached=True)
     try:
-        result = workflow.analyzer.preview(payload.text)
-        data = result if isinstance(result, dict) else result.model_dump()
+        raw = workflow.analyzer.preview(payload.text)
+        # Strip internal debug fields before schema validation
+        raw.pop("_input_length", None)
+        raw.pop("quality_checks", None)
+        validated = RequirementPreviewResult(**raw)
+        data = validated.model_dump()
         cache.set("preview", payload.text, data)
         return _timed(data, time.time() - t0)
     except Exception as e:
@@ -280,6 +321,60 @@ def generate_automation_code(payload: GenerateAutomationCodeInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent 3 failed: {e}")
 
+
+
+_RUNNABLE_FRAMEWORKS = {"pytest"}
+_MAX_RUN_OUTPUT = 8000
+
+
+class _RunTestFile(BaseModel):
+    file_name: str
+    code: str
+
+
+class RunTestsInput(BaseModel):
+    files: List[_RunTestFile]
+    framework: str = "pytest"
+    base_url: Optional[str] = ""
+
+
+@app.post("/run-tests")
+def run_tests(payload: RunTestsInput):
+    if not payload.files:
+        raise HTTPException(status_code=400, detail="At least one file is required")
+
+    base_url = (payload.base_url or "").strip()
+    if base_url and not base_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="base_url must start with http:// or https://")
+
+    if payload.framework not in _RUNNABLE_FRAMEWORKS:
+        return {
+            "supported": False,
+            "message": f"Framework '{payload.framework}' cannot be executed server-side. Only pytest is supported.",
+            "passed": 0, "failed": 0, "errors": 0, "total": 0,
+            "output": "", "test_results": [], "return_code": -1,
+        }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for f in payload.files:
+            code = _inject_base_url(f.code, base_url) if base_url else f.code
+            (_Path(tmpdir) / f.file_name).write_text(code, encoding="utf-8")
+
+        proc = subprocess.run(
+            ["python", "-m", "pytest", "-v", tmpdir],
+            capture_output=True, text=True, timeout=120,
+        )
+        raw_output = proc.stdout + proc.stderr
+        output = raw_output[:_MAX_RUN_OUTPUT]
+        parsed = _parse_pytest_output(raw_output)
+
+    return {
+        "supported": True,
+        "message": "Tests executed",
+        **parsed,
+        "output": output,
+        "return_code": proc.returncode,
+    }
 
 
 @app.post("/run-full-pipeline")

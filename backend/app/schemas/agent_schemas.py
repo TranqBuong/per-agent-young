@@ -15,6 +15,16 @@ class RequirementItem(BaseModel):
     id: str = ""
     text: str = ""
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def coerce_id(cls, v):
+        if v is None:
+            return ""
+        s = str(v).strip()
+        if not s:
+            _logger.warning("RequirementItem.id is empty — LLM may have used a different field name")
+        return s
+
 
 class OverviewItem(BaseModel):
     summary: str = ""
@@ -46,7 +56,6 @@ class ScoreBreakdown(BaseModel):
     completeness_missing: List[str] = []
     testability_found: List[str] = []
     testability_missing: List[str] = []
-    ambiguity_deductions: List[str] = []
     clarity_found: List[str] = []
     clarity_missing: List[str] = []
 
@@ -209,7 +218,7 @@ class TestCaseItem(BaseModel):
 class TestCasePayloadResult(BaseModel):
     system_type: str = "traditional"
     applied_techniques: List[AppliedTechnique] = []
-    test_cases: List[TestCaseItem]
+    test_cases: List[TestCaseItem] = []
     test_data_matrix: List[Dict[str, Any]] = []
     payload_templates: List[Dict[str, Any]] = []
 

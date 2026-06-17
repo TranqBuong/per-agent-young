@@ -72,6 +72,7 @@ class TestCasePayloadWorkflow:
         self._validate_grounding(scenarios, result)
         self._deduplicate_test_cases(result)
         self._ensure_minimum_test_case_count(scenarios, result)
+        self._renumber_test_cases(result)
         self._build_payload_templates(result)
         return result
 
@@ -151,6 +152,7 @@ class TestCasePayloadWorkflow:
         for tc in result.test_cases:
             fp = (
                 (tc.scenario_id or "")
+                + "|" + (tc.technique or "")
                 + "|" + _norm(tc.name)
                 + "|" + _norm(tc.expected_result or "")
             )
@@ -175,6 +177,15 @@ class TestCasePayloadWorkflow:
         for s in scenarios:
             if s.scenario_id not in covered:
                 result.test_cases.append(TestCaseItem(**make_fallback_tc(s.model_dump(), len(result.test_cases))))
+
+    def _renumber_test_cases(self, result: TestCasePayloadResult) -> None:
+        """Guarantee TC-TECHNIQUE-NNN format for ALL TCs including workflow-injected fallbacks."""
+        tech_counters: Dict[str, int] = {}
+        for tc in result.test_cases:
+            tech = (tc.technique or "UC").upper()
+            tc.technique = tech
+            tech_counters[tech] = tech_counters.get(tech, 0) + 1
+            tc.test_case_id = f"TC-{tech}-{tech_counters[tech]:03d}"
 
     def _build_payload_templates(self, result: "TestCasePayloadResult") -> None:
         """Build payload_templates deterministically from test_data if LLM left it empty."""

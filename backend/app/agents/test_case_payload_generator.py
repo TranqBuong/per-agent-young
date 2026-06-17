@@ -46,29 +46,37 @@ def make_fallback_tc(s: Dict[str, Any], index: int) -> Dict[str, Any]:
     }
 
 
-_TEST_CASE_GENERATION_PROMPT = """You are a QA engineer. Apply EVERY listed technique to the scenarios. Be CONCISE.
+_TEST_CASE_GENERATION_PROMPT = """You are a senior QA engineer. Your goal: MAXIMIZE test coverage for each scenario by generating MULTIPLE test cases per scenario.
+
+## How to analyze each scenario
+For each scenario, examine its "given/when/then" and think through ALL relevant test angles:
+1. **Happy path** (EP) — valid input, expected success
+2. **Boundary values** (BVA) — if the scenario involves numeric ranges, string lengths, dates, or limits: test min, max, min-1, max+1
+3. **Invalid / negative input** (EG) — missing fields, wrong types, out-of-range, unauthorized access, empty values
+4. **Security** (EG) — if input fields accept user text: XSS, SQL injection, special characters
+5. **Edge cases** (EP/EG) — empty list, zero, null, duplicate, very long string
+
+Generate a SEPARATE test case for EACH test angle that is relevant to the scenario. A simple scenario may produce 2-3 TCs; a complex input scenario may produce 4-6 TCs.
 
 ## Grounding rules (strictly enforced)
 - expected_result MUST be derived from the scenario's "then" field — paraphrase it, do NOT invent a different outcome
-- steps[1] (the action step) MUST reflect the scenario's "when" field — do not change the action
+- steps[1] (the action step) MUST reflect the scenario's "when" field
 - steps[0] (setup) MUST reflect the scenario's "given" field
-- test_data values MUST use field names and constraints stated in the requirement — do not invent fields not mentioned
+- test_data values MUST use field names stated in the requirement — do NOT invent fields
 - Do NOT add test cases for scenarios not in the input list
 
 ## Coverage rules
-- EVERY scenario_id MUST appear in at least one test case
-- Total test_cases >= total scenarios
-- Every technique MUST appear in at least one test_case
+- EVERY scenario_id MUST have MULTIPLE test cases (at minimum 2: one positive + one negative/edge)
+- Every listed technique MUST appear in at least one test_case across all scenarios
 - scenario_id in each test case MUST exactly match one of the input scenario_ids
-- If a scenario includes related_endpoint, reflect that endpoint in the action step or expected outcome when appropriate
 
 ## Format rules
-- Keep fields SHORT: name ≤10 words, preconditions ≤15 words, steps exactly 3 short strings, expected_result ≤15 words
-- test_data values MUST be literal strings or numbers — NEVER JavaScript expressions or code (no new Array(), no +, no functions)
-- For long boundary values, write the actual literal value directly (no .repeat())
-- For special chars like XSS/SQL, write them as plain JSON strings: "<script>alert(1)</script>", "' OR 1=1 --"
-- test_case_id MUST follow format TC-TECHNIQUE-NNN (e.g. TC-EP-001, TC-BVA-002) — ALWAYS include the technique abbreviation, zero-padded 3-digit number
-- priority MUST be exactly one of: "high", "medium", "low" (lowercase only)
+- name ≤10 words, preconditions ≤15 words, steps exactly 3 short strings, expected_result ≤15 words
+- test_data values MUST be literal strings or numbers — no code, no expressions
+- For boundary values, write the actual literal value (no .repeat())
+- For XSS/SQL, write plain JSON strings: "<script>alert(1)</script>", "' OR 1=1 --"
+- test_case_id format: TC-TECHNIQUE-NNN (e.g. TC-EP-001, TC-BVA-002)
+- priority: exactly "high", "medium", or "low"
 
 Return ONLY valid JSON:
 {
@@ -267,7 +275,6 @@ class TestCasePayloadGenerator:
             ({'positive', 'edge case'},          'EP',  'equivalence partitioning'),
             ({'boundary'},                        'BVA', 'boundary value analysis'),
             ({'negative', 'security'},            'EG',  'error guessing'),
-            ({'positive', 'negative', 'edge case', 'boundary', 'security'}, 'UC', 'use case testing'),
         ]
         selected_techniques = []
         for trigger_types, technique, rationale in _TYPE_TECHNIQUE_MAP:
@@ -277,6 +284,13 @@ class TestCasePayloadGenerator:
                     "rationale": rationale,
                     "applicable_scenarios": scenario_ids_all,
                 })
+        # UC: add only when multiple distinct scenario types are present (multi-step flows)
+        if len(types_present) >= 2 and len(selected_techniques) < 4:
+            selected_techniques.append({
+                "technique": "UC",
+                "rationale": "use case testing — multi-type scenarios detected",
+                "applicable_scenarios": scenario_ids_all,
+            })
         if not selected_techniques:
             selected_techniques = [
                 {"technique": "EP", "rationale": "default", "applicable_scenarios": scenario_ids_all},
@@ -285,41 +299,45 @@ class TestCasePayloadGenerator:
 
         system_type = "traditional"
 
-        # ── Call 2: generate test cases ──────────────────────────────
+        # ── Call 2: generate test cases (batched) ────────────────────
         technique_ids = [t["technique"] for t in selected_techniques]
         techniques_detail = "\n".join(
             f"- {t['technique']}: {(t.get('rationale') or '')[:60]}"
             for t in selected_techniques
         )
 
-        # Take top 15 scenarios by priority — fallback covers any remainder
+        # Sort by priority; batch 8 scenarios at a time so each batch produces
+        # 8×M TCs (~32) — well within the 4000-token output budget.
         _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
-        slim_scenarios_tc = sorted(
+        sorted_scenarios = sorted(
             slim_scenarios, key=lambda s: _PRIORITY_ORDER.get(s.get("priority", "low"), 2)
-        )[:15]
+        )
+        _BATCH_SIZE_TC = 8
+        batches = [sorted_scenarios[i:i + _BATCH_SIZE_TC] for i in range(0, len(sorted_scenarios), _BATCH_SIZE_TC)]
 
-        scenario_ids = [s['scenario_id'] for s in slim_scenarios_tc]
         ov_header = f"{overview_ctx}\n\n" if overview_ctx else ""
         req_context = f"Requirement:\n{_trunc(requirement_text, 2500)}\n\n" if requirement_text else ""
-        tc_user = (
-            f"{ov_header}"
-            f"{req_context}"
-            f"Techniques: {', '.join(technique_ids)}\n"
-            f"Scenarios to cover: {', '.join(scenario_ids)}\n\n"
-            f"Technique details:\n{techniques_detail}\n\n"
-            f"Scenarios:\n{json.dumps(slim_scenarios_tc, ensure_ascii=False)}"
-        )
 
-        # use_json_format=False: avoids GreenNode empty-content bug above ~1800 tokens,
-        # allowing max_tokens=3000 for larger scenario sets.
-        tc_result = self._call(
-            system=_TEST_CASE_GENERATION_PROMPT,
-            user=tc_user,
-            max_tokens=3000,
-            use_json_format=False,
-        )
-
-        test_cases = tc_result.get("test_cases", [])
+        test_cases: List[Dict[str, Any]] = []
+        for batch in batches:
+            scenario_ids = [s['scenario_id'] for s in batch]
+            tc_user = (
+                f"{ov_header}"
+                f"{req_context}"
+                f"Techniques: {', '.join(technique_ids)}\n"
+                f"Scenarios to cover: {', '.join(scenario_ids)}\n\n"
+                f"Technique details:\n{techniques_detail}\n\n"
+                f"Scenarios:\n{json.dumps(batch, ensure_ascii=False)}"
+            )
+            # use_json_format=False: avoids GreenNode empty-content bug above ~1800 tokens.
+            # max_tokens=4000: 8 scenarios × 4 techniques = ~32 TCs — need headroom.
+            batch_result = self._call(
+                system=_TEST_CASE_GENERATION_PROMPT,
+                user=tc_user,
+                max_tokens=4000,
+                use_json_format=False,
+            )
+            test_cases.extend(batch_result.get("test_cases", []))
 
         # Ensure every scenario has at least one test case (fallback)
         covered_scenarios = {tc.get("scenario_id") for tc in test_cases if tc.get("scenario_id")}

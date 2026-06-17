@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from groq import RateLimitError, APIConnectionError, APIStatusError, BadRequestError
+from openai import RateLimitError, APIConnectionError, APIStatusError, BadRequestError
 
 from backend.app.services.groq_retry import call_with_backoff, _MAX_RETRIES, _BASE_DELAY
 
@@ -140,7 +140,7 @@ class TestAPIStatusErrorNoRetry:
     def test_api_status_error_raises_runtime_immediately(self):
         err = _api_status(500)
         fn = MagicMock(side_effect=err)
-        with pytest.raises(RuntimeError, match="Groq API error"):
+        with pytest.raises(RuntimeError, match="API error"):
             call_with_backoff(fn)
         assert fn.call_count == 1
 

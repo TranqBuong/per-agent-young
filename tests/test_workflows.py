@@ -364,33 +364,25 @@ class TestDeduplicationAI:
             wf._deduplicate_test_cases_ai(r)
 
     def test_dispatcher_falls_back_on_llm_error(self):
-        """When AI call fails, dispatcher falls back to string dedup silently."""
+        """_deduplicate_test_cases uses string dedup only — same technique+name+expected = dup."""
         wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)
         wf.generator = MagicMock()
-        wf.generator._call.side_effect = RuntimeError("rate limit")
+        # Same technique EP, same normalized name, same expected → string dup
         r = TestCasePayloadResult(test_cases=[
             self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK"),
-            self._tc("TC-BVA-001", "SCN-001", "valid login", "200 OK"),  # string dup
+            self._tc("TC-EP-002", "SCN-001", "valid login", "200 OK"),
         ])
-        import warnings as _warnings
-        with _warnings.catch_warnings(record=True) as w:
-            _warnings.simplefilter("always")
-            wf._deduplicate_test_cases(r)
-        assert any("ai dedup unavailable" in str(x.message).lower() for x in w)
-        assert len(r.test_cases) == 1  # string fallback removed the dup
+        wf._deduplicate_test_cases(r)
+        assert len(r.test_cases) == 1
 
     def test_dispatcher_falls_back_when_no_generator(self):
-        """When generator attribute is missing (unit test env), falls back to string dedup."""
+        """_deduplicate_test_cases works without a generator (string dedup only)."""
         wf = TestCasePayloadWorkflow.__new__(TestCasePayloadWorkflow)  # no __init__
         r = TestCasePayloadResult(test_cases=[
             self._tc("TC-EP-001", "SCN-001", "Valid login", "200 OK"),
-            self._tc("TC-BVA-001", "SCN-001", "Valid login", "200 OK"),
+            self._tc("TC-EP-002", "SCN-001", "Valid login", "200 OK"),
         ])
-        import warnings as _warnings
-        with _warnings.catch_warnings(record=True) as w:
-            _warnings.simplefilter("always")
-            wf._deduplicate_test_cases(r)
-        assert any("ai dedup unavailable" in str(x.message).lower() for x in w)
+        wf._deduplicate_test_cases(r)
         assert len(r.test_cases) == 1
 
 

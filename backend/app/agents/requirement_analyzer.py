@@ -200,7 +200,10 @@ def _repair_unescaped_quotes(text: str) -> str:
                     out.append(ch)
                     in_string = True
                 else:
+                    # Unrecognized position — treat as opening quote anyway to avoid
+                    # leaving in_string=False for the content that follows
                     out.append(ch)
+                    in_string = True
             continue
 
         if in_string and ch in '\n\r':

@@ -29,8 +29,14 @@ class FullPipelineWorkflow:
     def run(self, payload: RequirementInput) -> Dict[str, Any]:
         framework = payload.framework or "pytest"
 
+        # Get rich overview (summary, features, business_rules) from preview before analyze
+        try:
+            preview_data = self.requirement_workflow.analyzer.preview(payload.text)
+        except Exception:
+            preview_data = {}
+
         analysis = self.requirement_workflow.run(payload.text)
-        overview = self._build_overview(analysis)
+        overview = self._build_overview(analysis, preview=preview_data)
 
         test_cases_result = self.test_case_workflow.run(
             analysis.scenarios,

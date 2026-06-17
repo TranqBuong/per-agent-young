@@ -57,7 +57,7 @@ def _system_prompt(framework: str) -> str:
 def _parse_separator(text: str, framework: str) -> Dict[str, Any]:
     """Parse ===FILE:path=== ... ===END=== blocks — no JSON escaping issues."""
     files = []
-    for m in re.finditer(r'===FILE:([^\n=]+)===\s*(.*?)^===END===', text, re.DOTALL | re.MULTILINE):
+    for m in re.finditer(r'===FILE:([^\n=]+)===\s*(.*?)^===END===\s*$', text, re.DOTALL | re.MULTILINE):
         path = m.group(1).strip()
         code = m.group(2).strip()
         if path and code:
@@ -189,8 +189,8 @@ class AutomationCodeWriter:
         test_cases: List[Dict[str, Any]],
         framework: str = "pytest",
         requirement_text: Optional[str] = None,
-        payload_templates: Optional[List[Dict[str, Any]]] = None,
-        test_data_matrix: Optional[List[Dict[str, Any]]] = None,
+        payload_templates: Optional[List[Dict[str, Any]]] = None,  # reserved, not used by Agent 3
+        test_data_matrix: Optional[List[Dict[str, Any]]] = None,   # reserved, not used by Agent 3
     ) -> Dict[str, Any]:
         if not test_cases:
             _logger.warning("Agent3: no test_cases provided — returning empty result")
