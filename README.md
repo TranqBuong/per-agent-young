@@ -26,12 +26,12 @@ Agent 3 — Automation Code Writer
 ## Yêu cầu
 
 - Python 3.11+
-- Groq API key (đăng ký tại [console.groq.com](https://console.groq.com))
+- GreenNode AI Platform API key (đăng ký tại [aiplatform.console.vngcloud.vn](https://aiplatform.console.vngcloud.vn))
 
 ## Cài đặt
 
 ```bash
-# 1. Clone / giải nén project
+# 1. Clone project
 cd per-agent-young
 
 # 2. Tạo virtual environment
@@ -44,17 +44,18 @@ pip install -r requirements.txt
 
 # 4. Cấu hình API key
 cp .env.example .env
-# Mở .env và điền GROQ_API_KEY của bạn
+# Mở .env và điền GREENNODE_AIP_KEY của bạn
 ```
 
 ## Chạy server
 
 ```bash
 # Cách 1 — load .env tự động
-export $(cat .env | xargs) && uvicorn backend.main:app --reload --port 8080
+set -a && source .env && set +a
+uvicorn backend.main:app --reload --port 8080
 
 # Cách 2 — set thủ công
-export GROQ_API_KEY=your-key-here
+export GREENNODE_AIP_KEY=your-key-here
 uvicorn backend.main:app --reload --port 8080
 ```
 
@@ -91,16 +92,22 @@ Mở trình duyệt tại: **http://localhost:8080**
 ## Chạy tests
 
 ```bash
-python -m pytest tests/ -v
+# Unit tests
+python -m pytest tests/ -v --ignore=tests/test_video_pipeline.py
+
+# Integration tests (cần GREENNODE_AIP_KEY thật)
+set -a && source .env && set +a
+python -m pytest tests/test_video_pipeline.py -v
 ```
 
 ## Biến môi trường
 
 | Biến | Bắt buộc | Mô tả |
 |---|---|---|
-| `GROQ_API_KEY` | ✅ | Groq API key |
-| `GROQ_MODEL` | ❌ | Model chính (default: `llama-3.1-8b-instant`) |
-| `GROQ_MODEL_LIGHT` | ❌ | Model nhẹ cho preview (default: `llama-3.1-8b-instant`) |
+| `GREENNODE_AIP_KEY` | ✅ | GreenNode AI Platform API key |
+| `GREENNODE_AIP_BASE_URL` | ❌ | Base URL của AIP (default: `https://maas-llm-aiplatform-hcm.api.vngcloud.vn/v1`) |
+| `GREENNODE_MODEL` | ❌ | Model chính (default: `deepseek/deepseek-v4-flash`) |
+| `GREENNODE_MODEL_LIGHT` | ❌ | Model nhẹ cho preview (default: `deepseek/deepseek-v4-flash`) |
 
 ## Cache
 
